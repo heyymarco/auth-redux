@@ -1,5 +1,9 @@
 // redux:
 import type {
+    AnyAction,
+    ThunkDispatch,
+}                               from '@reduxjs/toolkit'
+import type {
     // fetches:
     BaseQueryFn,
     fetchBaseQuery,
@@ -76,6 +80,7 @@ const fetchLogout = () : FetchArgs => ({
     credentials     : 'include',           // need to DELETE `refreshToken` in the `http_only_cookie`
     responseHandler : 'content-type',
 });
+let apiDispatch : ThunkDispatch<any, any, AnyAction>|undefined = undefined;
 
 
 
@@ -98,6 +103,19 @@ export const injectAuthApiSlice = <
                     // parse the response to get `accessToken`:
                     return await config.parseAccessToken(response);
                 },
+                onCacheEntryAdded(arg, api) {
+                    if (!apiDispatch) {
+                        // steal the `dispatch()` for the `re-auth`:
+                        apiDispatch = api.dispatch;
+                        
+                        
+                        
+                        // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
+                        apiDispatch(
+                            injectedAuthApiSlice.endpoints.auth.initiate()
+                        );
+                    } // if
+                },
             }),
             login  : builder.mutation<AccessToken, Credential>({
                 query : fetchLogin,
@@ -106,6 +124,20 @@ export const injectAuthApiSlice = <
                     return await config.parseAccessToken(response);
                 },
                 async onCacheEntryAdded(credential, api) {
+                    if (!apiDispatch) {
+                        // steal the `dispatch()` for the `re-auth`:
+                        apiDispatch = api.dispatch;
+                        
+                        
+                        
+                        // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
+                        apiDispatch(
+                            injectedAuthApiSlice.endpoints.auth.initiate()
+                        );
+                    } // if
+                    
+                    
+                    
                     let accessToken : AccessToken|undefined = undefined;
                     try {
                         // wait until the login mutation is `fulfilled`, so the `data` can be consumed:
