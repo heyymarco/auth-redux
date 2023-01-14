@@ -2,23 +2,20 @@ import { Button } from '@reusable-ui/components';
 import Head from 'next/head'
 import { Main } from '../components/Main'
 import { RequireAuth } from '../store/features/auth/RequireAuth'
+import { usePostMutation } from '../store/features/api/apiSlice';
 
 
 
 export default function Posts() {
-    // const [auth] = useAuth();
+    const [deletePost, { isLoading }] = usePostMutation();
     const handleDelete = async () => {
-        // try {
-        //     // const response = await axios.delete('post', {
-        //     //     headers         : { 'Content-Type': 'application/json' },
-        //     //     withCredentials : true,
-        //     // });
-        //     const response = await auth?.axios?.delete('post');
-        //     alert(`Delete success! Server message ${JSON.stringify(response?.data)}`);
-        // }
-        // catch (error) {
-        //     alert(`Delete failed: ${error}`);
-        // } // try
+        try {
+            await deletePost(undefined).unwrap();
+            alert(`Delete success!`);
+        }
+        catch (error) {
+            alert(`Delete failed: ${error}`);
+        } // try
     };
     
     
@@ -33,7 +30,7 @@ export default function Posts() {
                 <p>
                     Posts here...
                 </p>
-                <Button theme='danger' onClick={handleDelete}>
+                <Button theme='danger' onClick={handleDelete} enabled={!isLoading}>
                     Delete
                 </Button>
             </Main>

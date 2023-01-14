@@ -10,9 +10,17 @@ export const apiSlice = createApi({
         baseUrl : 'http://localhost:3001',
     })),
     endpoints   : (builder) => ({
-        /* empty */
+        post: builder.mutation<void, void>({
+            query: () => ({
+                url    : '/post',
+                method : 'DELETE',
+            }),
+        }),
     }),
 });
+export const {
+    usePostMutation,
+} = apiSlice;
 
 
 

@@ -55,11 +55,6 @@ export interface Authentication {
 
 
 
-// private store:
-let accessToken : Authentication['accessToken']|undefined = undefined;
-
-
-
 // handlers:
 const fetchRefreshToken = () : FetchArgs => ({
     url             : config.authRefreshPath,
@@ -80,7 +75,7 @@ const fetchLogout = () : FetchArgs => ({
     credentials     : 'include',           // need to DELETE `refreshToken` in the `http_only_cookie`
     responseHandler : 'content-type',
 });
-let apiDispatch : ThunkDispatch<any, any, AnyAction>|undefined = undefined;
+let getAccessToken : (() => AccessToken|undefined)|undefined = undefined;
 
 
 
@@ -104,14 +99,14 @@ export const injectAuthApiSlice = <
                     return await config.parseAccessToken(response);
                 },
                 onCacheEntryAdded(arg, api) {
-                    if (!apiDispatch) {
-                        // steal the `dispatch()` for the `re-auth`:
-                        apiDispatch = api.dispatch;
+                    if (!getAccessToken) {
+                        // provides the callback for getting the auth data:
+                        getAccessToken = () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data;
                         
                         
                         
                         // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-                        apiDispatch(
+                        api.dispatch(
                             injectedAuthApiSlice.endpoints.auth.initiate()
                         );
                     } // if
@@ -124,14 +119,14 @@ export const injectAuthApiSlice = <
                     return await config.parseAccessToken(response);
                 },
                 async onCacheEntryAdded(credential, api) {
-                    if (!apiDispatch) {
-                        // steal the `dispatch()` for the `re-auth`:
-                        apiDispatch = api.dispatch;
+                    if (!getAccessToken) {
+                        // provides the callback for getting the auth data:
+                        getAccessToken = () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data;
                         
                         
                         
                         // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-                        apiDispatch(
+                        api.dispatch(
                             injectedAuthApiSlice.endpoints.auth.initiate()
                         );
                     } // if
@@ -175,14 +170,14 @@ export const injectAuthApiSlice = <
         useAuthQuery      : useAuth,
         useLoginMutation  : useLogin,
         useLogoutMutation : useLogout,
-    } = injectedAuthApiSlice;
+    ...restInjectedAuthApiSlice} = injectedAuthApiSlice;
     
     // return the combined apiSlice:
     return {
         useAuth,
         useLogin,
         useLogout,
-        ...apiSlice
+        ...restInjectedAuthApiSlice
     };
 };
 
@@ -201,8 +196,14 @@ const injectHeaders = (headers: RawHeaders): Headers => {
     
     
     
-    if (accessToken && !normalizedHeaders.has('Authorization')) {
-        normalizedHeaders.set('Authorization', `Bearer ${accessToken}`);
+    if (!normalizedHeaders.has('Authorization')) {
+        if (getAccessToken) {
+            const accessToken = getAccessToken();
+            if (accessToken) {
+                console.log('accessToken: ', accessToken);
+                normalizedHeaders.set('Authorization', `Bearer ${accessToken}`);
+            } // if
+        } // if
     } // if
     
     
@@ -239,10 +240,10 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
         
         
         // re-auth:
-        if (accessToken && result.error && [config.tokenExpiredStatus].flat().includes(result.error.status)) {
+        if (result.error && [config.tokenExpiredStatus].flat().includes(result.error.status) && getAccessToken?.()) {
             // re-generate accessToken:
             await baseQueryFn(fetchRefreshToken(), api, extraOptions);
-            if (accessToken) {
+            if (getAccessToken?.()) {
                 // retry the initial query with a new accessToken:
                 result = await baseQueryFn(injectArgs(args), api, extraOptions);
             }
