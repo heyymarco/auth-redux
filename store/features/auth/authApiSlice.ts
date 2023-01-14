@@ -20,6 +20,11 @@ import type {
     ModuleName,
 }                               from '@reduxjs/toolkit/dist/query/apiTypes'
 
+// vanilla-redux:
+import type {
+    coreModuleName,
+}                               from '@reduxjs/toolkit/dist/query/core/module'
+
 // react-redux:
 import type {
     // react specific hooks:
@@ -37,9 +42,10 @@ export interface Credential {
     username : string
     password : string
 }
+export type AccessToken = string & {}
 export interface Authentication {
     // username     : string // the `username` is encoded in `accessToken`
-    accessToken     : string
+    accessToken     : AccessToken
     // refreshToken : string // for security reason: the `refreshToken` should be in the http_only_cookie
 }
 
@@ -51,46 +57,24 @@ let accessToken : Authentication['accessToken']|undefined = undefined;
 
 
 // handlers:
-const updateAccessTokenResponseHandler : ResponseHandler = async (response) => {
-    if (response.ok) {
-        try {
-            accessToken = await config.parseAccessToken(response);
-        }
-        catch {
-            accessToken = undefined; // discard access token (a failed login/refreshToken causes logout)
-        } // try
-    } // if
-    
-    
-    
-    return null; // nothing to save to Redux, the accessToken is safe to be stored in module's variable
-};
-const logoutResponseHandler : ResponseHandler = async () => {
-    accessToken = undefined; // discard access token, it will lost until expired
-    
-    
-    
-    return null; // nothing to save to Redux
-};
-
 const fetchRefreshToken = () : FetchArgs => ({
     url             : config.authRefreshPath,
     method          : config.authRefreshMethod,
-    credentials     : 'include',                        // need to SEND_BACK `refreshToken` in the `http_only_cookie`
-    responseHandler : updateAccessTokenResponseHandler, // will RECEIVE a new `accessToken` to be stored to a private_store
+    credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
+    responseHandler : 'content-type',
 });
 const fetchLogin = (credential: Credential) : FetchArgs => ({
     url             : config.loginPath,
     method          : config.loginMethod,
-    credentials     : 'include',                        // need to RECEIVE `refreshToken` in the `http_only_cookie`
-    body            : credential,                       // post the username & password to be verified on backend
-    responseHandler : updateAccessTokenResponseHandler, // will RECEIVE a `accessToken` to be stored to a private_store
+    credentials     : 'include',           // need to RECEIVE `refreshToken` in the `http_only_cookie`
+    body            : credential,          // post the username & password to be verified on backend
+    responseHandler : 'content-type',
 });
 const fetchLogout = () : FetchArgs => ({
     url             : config.logoutPath,
     method          : config.logoutMethod,
-    credentials     : 'include',                        // need to DELETE `refreshToken` in the `http_only_cookie`
-    responseHandler : logoutResponseHandler,
+    credentials     : 'include',           // need to DELETE `refreshToken` in the `http_only_cookie`
+    responseHandler : 'content-type',
 });
 
 
@@ -106,16 +90,48 @@ export const injectAuthApiSlice = <
     TEnhancers   extends ModuleName
 >(apiSlice: Api<TBaseQuery, TDefinitions, TReducerPath, TTagTypes, TEnhancers>) => {
     // inject auth endpoints:
-    const injectedAuthApiSlice = (apiSlice as Api<BaseQueryFn, {}, TReducerPath, TTagTypes, typeof reactHooksModuleName>).injectEndpoints({
+    const injectedAuthApiSlice = (apiSlice as unknown as Api<BaseQueryFn, {}, TReducerPath, TTagTypes, typeof coreModuleName | typeof reactHooksModuleName>).injectEndpoints({
         endpoints  : (builder) => ({
-            auth   : builder.mutation<Authentication, void>({
+            auth   : builder.query<AccessToken, void>({
                 query : fetchRefreshToken,
+                async transformResponse(response, meta, arg) {
+                    // parse the response to get `accessToken`:
+                    return await config.parseAccessToken(response);
+                },
             }),
-            login  : builder.mutation<Authentication, Credential>({
+            login  : builder.mutation<AccessToken, Credential>({
                 query : fetchLogin,
+                async transformResponse(response, meta, arg) {
+                    // parse the response to get `accessToken`:
+                    return await config.parseAccessToken(response);
+                },
+                async onCacheEntryAdded(credential, api) {
+                    let accessToken : AccessToken|undefined = undefined;
+                    try {
+                        // wait until the login mutation is `fulfilled`, so the `data` can be consumed:
+                        accessToken = (await api.cacheDataLoaded).data;
+                    }
+                    catch {
+                        // no-op in case `cacheEntryRemoved` resolves before `cacheDataLoaded`,
+                        // in which case `cacheDataLoaded` will throw
+                    } // try
+                    
+                    
+                    
+                    if (accessToken) {
+                        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
+                        await api.dispatch(
+                            injectedAuthApiSlice.util.upsertQueryData('auth' as any, undefined, accessToken)
+                        );
+                    } // if
+                },
             }),
             logout : builder.mutation<void, void>({
                 query : fetchLogout,
+                transformResponse(response, meta, arg) {
+                    // no need to store any data:
+                    return undefined;
+                },
             }),
         }),
     });
@@ -124,17 +140,17 @@ export const injectAuthApiSlice = <
     
     // rename the hooks to more human readable names:
     const {
-        useAuthMutation   : useAuth,
+        useAuthQuery      : useAuth,
         useLoginMutation  : useLogin,
         useLogoutMutation : useLogout,
     } = injectedAuthApiSlice;
     
-    // return the injected apiSlice:
+    // return the combined apiSlice:
     return {
         useAuth,
         useLogin,
         useLogout,
-        ...injectedAuthApiSlice
+        ...apiSlice
     };
 };
 
@@ -153,7 +169,7 @@ const injectHeaders = (headers: RawHeaders): Headers => {
     
     
     
-    if (!normalizedHeaders.has('Authorization')) {
+    if (accessToken && !normalizedHeaders.has('Authorization')) {
         normalizedHeaders.set('Authorization', `Bearer ${accessToken}`);
     } // if
     
@@ -192,11 +208,15 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
         
         // re-auth:
         if (accessToken && result.error && [config.tokenExpiredStatus].flat().includes(result.error.status)) {
+            // re-generate accessToken:
             await baseQueryFn(fetchRefreshToken(), api, extraOptions);
             if (accessToken) {
-                // retry the initial query:
+                // retry the initial query with a new accessToken:
                 result = await baseQueryFn(injectArgs(args), api, extraOptions);
-            } // if
+            }
+            else {
+                // failed to re-generate accessToken because the user was loggedOut or the refreshToken was expired
+            }
         } // if
         
         

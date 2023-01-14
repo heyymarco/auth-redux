@@ -7,8 +7,9 @@ export default {
     // auth server:
     authServerURL       : 'http://localhost:3001',
     tokenExpiredStatus  : 403,
-    parseAccessToken    : async (response: Response): Promise<string> => {
-        const accessToken = (await response.json())?.accessToken;
+    parseAccessToken    : async (response: unknown): Promise<string> => {
+        if (typeof(response) !== 'object') throw Error('invalid data');
+        const accessToken = (response as any)?.accessToken;
         if (!accessToken) throw Error('invalid data');
         return accessToken;
     },
