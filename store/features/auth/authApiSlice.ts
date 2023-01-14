@@ -240,15 +240,11 @@ const normalizeArgs = (args: RawArgs): FetchArgs => {
     return args;
 };
 const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
-    let normalizedArgs = normalizeArgs(args);
+    const normalizedArgs = { ...normalizeArgs(args) }; // normalize & clone the args
     
     
     
-    const newHeaders = injectHeaders(normalizedArgs.headers, accessToken);
-    if (newHeaders !== normalizedArgs.headers) {
-        if (normalizedArgs === args) normalizedArgs = {...normalizedArgs}; // clone the args BEFORE mutate
-        normalizedArgs.headers = newHeaders; // mutate the headers
-    } // if
+    normalizedArgs.headers = injectHeaders(normalizedArgs.headers, accessToken);
     
     
     
@@ -277,6 +273,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
             }
             else {
                 // failed to re-generate accessToken because the user was loggedOut or the refreshToken was expired
+                // TODO: logout()
             }
         } // if
         
@@ -286,4 +283,3 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
     };
     return interceptedBaseQueryFn;
 };
-
