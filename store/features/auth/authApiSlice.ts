@@ -1,9 +1,5 @@
 // redux:
 import type {
-    AnyAction,
-    ThunkDispatch,
-}                               from '@reduxjs/toolkit'
-import type {
     // fetches:
     BaseQueryFn,
     fetchBaseQuery,
@@ -17,7 +13,6 @@ import type {
 import type {
     // requests & responses:
     FetchArgs,
-    ResponseHandler,
 }                               from '@reduxjs/toolkit/dist/query/fetchBaseQuery'
 import type {
     // modules:
