@@ -12,8 +12,9 @@ export const apiSlice = createApi({
     endpoints   : (builder) => ({
         post: builder.mutation<void, void>({
             query: () => ({
-                url    : '/post',
-                method : 'DELETE',
+                url             : '/post',
+                method          : 'DELETE',
+                responseHandler : 'content-type',
             }),
         }),
     }),

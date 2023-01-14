@@ -10,7 +10,7 @@ export interface RequireAuthProps {
 export const RequireAuth = ({roles: requiredRoles, children}: RequireAuthProps) => {
     const {isUninitialized, isLoading, isSuccess, isError, data: auth} = useAuth();
     
-    console.log({isUninitialized, isLoading, isSuccess, isError, auth});
+    
     
     return (
         <>

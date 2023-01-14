@@ -75,8 +75,11 @@ const fetchLogout = () : FetchArgs => ({
     credentials     : 'include',           // need to DELETE `refreshToken` in the `http_only_cookie`
     responseHandler : 'content-type',
 });
-let getAccessToken : (() => AccessToken|undefined)|undefined = undefined;
-
+let authApi : {
+    unsubscribe        : () => void
+    getAccessToken     : () => AccessToken|undefined
+    refreshAccessToken : () => Promise<AccessToken|undefined>
+} | undefined = undefined;
 
 
 
@@ -99,17 +102,30 @@ export const injectAuthApiSlice = <
                     return await config.parseAccessToken(response);
                 },
                 onCacheEntryAdded(arg, api) {
-                    if (!getAccessToken) {
-                        // provides the callback for getting the auth data:
-                        getAccessToken = () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data;
-                        
-                        
-                        
+                    if (!authApi) authApi = {
                         // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-                        api.dispatch(
+                        unsubscribe        : api.dispatch(
                             injectedAuthApiSlice.endpoints.auth.initiate()
-                        );
-                    } // if
+                        ).unsubscribe,
+                        
+                        // provides the callback for getting the auth data:
+                        getAccessToken     : () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data,
+                        
+                        refreshAccessToken : async () => {
+                            const processing  = api.dispatch(
+                                injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
+                            );
+                            try {
+                                return await processing.unwrap();
+                            }
+                            catch (err) {
+                                return undefined;
+                            }
+                            finally {
+                                processing.unsubscribe();
+                            } // try
+                        },
+                    };
                 },
             }),
             login  : builder.mutation<AccessToken, Credential>({
@@ -119,17 +135,30 @@ export const injectAuthApiSlice = <
                     return await config.parseAccessToken(response);
                 },
                 async onCacheEntryAdded(credential, api) {
-                    if (!getAccessToken) {
-                        // provides the callback for getting the auth data:
-                        getAccessToken = () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data;
-                        
-                        
-                        
+                    if (!authApi) authApi = {
                         // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-                        api.dispatch(
+                        unsubscribe        : api.dispatch(
                             injectedAuthApiSlice.endpoints.auth.initiate()
-                        );
-                    } // if
+                        ).unsubscribe,
+                        
+                        // provides the callback for getting the auth data:
+                        getAccessToken     : () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data,
+                        
+                        refreshAccessToken : async () => {
+                            const processing  = api.dispatch(
+                                injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
+                            );
+                            try {
+                                return await processing.unwrap();
+                            }
+                            catch (err) {
+                                return undefined;
+                            }
+                            finally {
+                                processing.unsubscribe();
+                            } // try
+                        },
+                    };
                     
                     
                     
@@ -191,19 +220,13 @@ const normalizeHeaders = (headers: RawHeaders): Headers => {
     if (Array.isArray(headers))     return new Headers(headers as [string, string][]);
     return new Headers(Object.entries(headers).map(([key, value]) => [key, value ?? ''] as [string, string]));
 };
-const injectHeaders = (headers: RawHeaders): Headers => {
+const injectHeaders = (headers: RawHeaders, accessToken: AccessToken): Headers => {
     const normalizedHeaders = normalizeHeaders(headers);
     
     
     
     if (!normalizedHeaders.has('Authorization')) {
-        if (getAccessToken) {
-            const accessToken = getAccessToken();
-            if (accessToken) {
-                console.log('accessToken: ', accessToken);
-                normalizedHeaders.set('Authorization', `Bearer ${accessToken}`);
-            } // if
-        } // if
+        normalizedHeaders.set('Authorization', `Bearer ${accessToken}`);
     } // if
     
     
@@ -216,12 +239,16 @@ const normalizeArgs = (args: RawArgs): FetchArgs => {
     if (typeof(args) === 'string') return { url: args };
     return args;
 };
-const injectArgs = (args: RawArgs): FetchArgs => {
-    const normalizedArgs = normalizeArgs(args);
+const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
+    let normalizedArgs = normalizeArgs(args);
     
     
     
-    normalizedArgs.headers = injectHeaders(normalizedArgs.headers);
+    const newHeaders = injectHeaders(normalizedArgs.headers, accessToken);
+    if (newHeaders !== normalizedArgs.headers) {
+        if (normalizedArgs === args) normalizedArgs = {...normalizedArgs}; // clone the args BEFORE mutate
+        normalizedArgs.headers = newHeaders; // mutate the headers
+    } // if
     
     
     
@@ -235,17 +262,18 @@ const injectArgs = (args: RawArgs): FetchArgs => {
 export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBaseQuery>): ReturnType<typeof fetchBaseQuery> => {
     const interceptedBaseQueryFn : typeof baseQueryFn = async (args, api, extraOptions) => {
         // the initial query:
-        let result = await baseQueryFn(injectArgs(args), api, extraOptions);
+        let accessToken = authApi?.getAccessToken();
+        let result      = await baseQueryFn(accessToken ? injectArgs(args, accessToken) : args, api, extraOptions);
         
         
         
         // re-auth:
-        if (result.error && [config.tokenExpiredStatus].flat().includes(result.error.status) && getAccessToken?.()) {
+        if (accessToken && result.error && [config.tokenExpiredStatus].flat().includes(result.error.status)) {
             // re-generate accessToken:
-            await baseQueryFn(fetchRefreshToken(), api, extraOptions);
-            if (getAccessToken?.()) {
+            accessToken = await authApi?.refreshAccessToken();
+            if (accessToken) {
                 // retry the initial query with a new accessToken:
-                result = await baseQueryFn(injectArgs(args), api, extraOptions);
+                result  = await baseQueryFn(injectArgs(args, accessToken), api, extraOptions);
             }
             else {
                 // failed to re-generate accessToken because the user was loggedOut or the refreshToken was expired
