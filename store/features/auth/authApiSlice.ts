@@ -23,6 +23,10 @@ import type {
     // modules:
     ModuleName,
 }                               from '@reduxjs/toolkit/dist/query/apiTypes'
+import type {
+    QueryCacheLifecycleApi,
+    MutationCacheLifecycleApi,
+}                               from '@reduxjs/toolkit/dist/query/endpointDefinitions'
 
 // vanilla-redux:
 import type {
@@ -102,30 +106,7 @@ export const injectAuthApiSlice = <
                     return await config.parseAccessToken(response);
                 },
                 onCacheEntryAdded(arg, api) {
-                    if (!authApi) authApi = {
-                        // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-                        unsubscribe        : api.dispatch(
-                            injectedAuthApiSlice.endpoints.auth.initiate()
-                        ).unsubscribe,
-                        
-                        // provides the callback for getting the auth data:
-                        getAccessToken     : () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data,
-                        
-                        refreshAccessToken : async () => {
-                            const processing  = api.dispatch(
-                                injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
-                            );
-                            try {
-                                return await processing.unwrap();
-                            }
-                            catch (err) {
-                                return undefined;
-                            }
-                            finally {
-                                processing.unsubscribe();
-                            } // try
-                        },
-                    };
+                    createAuthApiIfNeeded(api);
                 },
             }),
             login  : builder.mutation<AccessToken, Credential>({
@@ -135,30 +116,7 @@ export const injectAuthApiSlice = <
                     return await config.parseAccessToken(response);
                 },
                 async onCacheEntryAdded(credential, api) {
-                    if (!authApi) authApi = {
-                        // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-                        unsubscribe        : api.dispatch(
-                            injectedAuthApiSlice.endpoints.auth.initiate()
-                        ).unsubscribe,
-                        
-                        // provides the callback for getting the auth data:
-                        getAccessToken     : () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data,
-                        
-                        refreshAccessToken : async () => {
-                            const processing  = api.dispatch(
-                                injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
-                            );
-                            try {
-                                return await processing.unwrap();
-                            }
-                            catch (err) {
-                                return undefined;
-                            }
-                            finally {
-                                processing.unsubscribe();
-                            } // try
-                        },
-                    };
+                    createAuthApiIfNeeded(api);
                     
                     
                     
@@ -191,6 +149,40 @@ export const injectAuthApiSlice = <
             }),
         }),
     });
+    
+    
+    
+    // utils:
+    const createAuthApiIfNeeded = (
+        api: | QueryCacheLifecycleApi<void, BaseQueryFn<any, unknown, unknown, {}, {}>, AccessToken, TReducerPath>
+             | MutationCacheLifecycleApi<Credential, BaseQueryFn<any, unknown, unknown, {}, {}>, AccessToken, TReducerPath>
+    ): void => {
+        if (authApi) return;
+        authApi = {
+            // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
+            unsubscribe        : api.dispatch(
+                injectedAuthApiSlice.endpoints.auth.initiate()
+            ).unsubscribe,
+            
+            // provides the callback for getting the auth data:
+            getAccessToken     : () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data,
+            
+            refreshAccessToken : async () => {
+                const processing  = api.dispatch(
+                    injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
+                );
+                try {
+                    return await processing.unwrap();
+                }
+                catch (err) {
+                    return undefined;
+                }
+                finally {
+                    processing.unsubscribe();
+                } // try
+            },
+        };
+    };
     
     
     
