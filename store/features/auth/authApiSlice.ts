@@ -78,7 +78,7 @@ let authApi : {
     unsubscribe        : () => void
     getAccessToken     : () => AccessToken|null|undefined
     refreshAccessToken : () => Promise<AccessToken|null|undefined>
-    logout             : () => void
+    logout             : (forceLogout?: boolean) => void
 } | undefined = undefined;
 
 
@@ -139,18 +139,32 @@ export const injectAuthApiSlice = <
                         } // if
                     },
                 }),
-                logout : builder.mutation<void, void>({
+                logout : builder.mutation<void, boolean|undefined>({
                     query : fetchLogout,
                     transformResponse(response, meta, arg) {
                         // no need to store any data:
                         return undefined;
                     },
-                    async onCacheEntryAdded(arg, api) {
-                        // mark accessToken as loggedOut:
-                        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
-                        await api.dispatch(
-                            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */null /* = loggedOut */)
-                        );
+                    async onCacheEntryAdded(forceLogout = false, api) {
+                        let loggedOut = false;
+                        try {
+                            // wait until the logout mutation is `fulfilled`:
+                            await api.cacheDataLoaded;
+                            loggedOut = true;
+                        }
+                        catch {
+                            // logout failed
+                        } // try
+                        
+                        
+                        
+                        if (loggedOut || forceLogout) {
+                            // mark accessToken as loggedOut:
+                            // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
+                            await api.dispatch(
+                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */null /* = loggedOut */)
+                            );
+                        } // if
                     },
                 }),
             }),
@@ -189,9 +203,9 @@ export const injectAuthApiSlice = <
                 } // try
             },
             
-            logout             : async () => {
+            logout             : async (forceLogout) => {
                 const processing  = api.dispatch(
-                    injectedAuthApiSlice.endpoints.logout.initiate()
+                    injectedAuthApiSlice.endpoints.logout.initiate(forceLogout)
                 );
                 try {
                     return await processing.unwrap();
@@ -288,7 +302,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
             }
             else {
                 // failed to re-generate accessToken because the user was loggedOut or the refreshToken was expired
-                await authApi?.logout();
+                await authApi?.logout(/* forceLogout: */true);
             }
         } // if
         
