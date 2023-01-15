@@ -23,7 +23,6 @@ export interface AuthConfig {
     
     
     // behaviors:
-    tagTypes            : string[],
     persistLoginKey     : string,
     defaultPersistLogin : boolean,
     
@@ -59,7 +58,6 @@ const {
     
     
     // behaviors:
-    tagTypes            = ['Auth'],
     persistLoginKey     = 'persistLogin',
     defaultPersistLogin = false,
     
@@ -87,7 +85,6 @@ export default {
     
     
     // behaviors:
-    tagTypes,
     persistLoginKey,
     defaultPersistLogin,
     

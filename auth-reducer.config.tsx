@@ -26,7 +26,6 @@ export default {
     
     
     // behaviors:
-    tagTypes            : ['Auth'],
     persistLoginKey     : 'persistLogin',
     defaultPersistLogin : false,
     

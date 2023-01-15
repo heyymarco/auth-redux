@@ -76,8 +76,8 @@ const fetchLogout = () : FetchArgs => ({
 });
 let authApi : {
     unsubscribe        : () => void
-    getAccessToken     : () => AccessToken|undefined
-    refreshAccessToken : () => Promise<AccessToken|undefined>
+    getAccessToken     : () => AccessToken|null|undefined
+    refreshAccessToken : () => Promise<AccessToken|null|undefined>
     logout             : () => void
 } | undefined = undefined;
 
@@ -95,9 +95,6 @@ export const injectAuthApiSlice = <
     // inject auth endpoints:
     const injectedAuthApiSlice = (
         (apiSlice as unknown as Api<BaseQueryFn, {}, TReducerPath, TTagTypes, typeof coreModuleName | typeof reactHooksModuleName>)
-        .enhanceEndpoints({
-            addTagTypes : config.tagTypes,
-        })
         .injectEndpoints({
             endpoints  : (builder) => ({
                 auth   : builder.query<AccessToken, void>({
@@ -109,7 +106,6 @@ export const injectAuthApiSlice = <
                     onCacheEntryAdded(arg, api) {
                         createAuthApiIfNeeded(api);
                     },
-                    providesTags : config.tagTypes,
                 }),
                 login  : builder.mutation<AccessToken, Credential>({
                     query : fetchLogin,
@@ -134,10 +130,11 @@ export const injectAuthApiSlice = <
                         
                         
                         
+                        // update with a new accessToken:
                         if (accessToken) {
                             // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
                             await api.dispatch(
-                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, undefined, accessToken)
+                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */accessToken)
                             );
                         } // if
                     },
@@ -148,7 +145,13 @@ export const injectAuthApiSlice = <
                         // no need to store any data:
                         return undefined;
                     },
-                    invalidatesTags : config.tagTypes,
+                    async onCacheEntryAdded(arg, api) {
+                        // mark accessToken as loggedOut:
+                        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
+                        await api.dispatch(
+                            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */null /* = loggedOut */)
+                        );
+                    },
                 }),
             }),
         })
