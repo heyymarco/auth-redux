@@ -9,7 +9,7 @@ export interface AuthConfig {
     // auth server:
     authServerURL       : string
     tokenExpiredStatus  : number|string|(number|string)[],
-    parseAccessToken    : (response: unknown) => Promise<string>
+    selectAccessToken   : (data: {}) => string|Promise<string>
     
     authRefreshPath     : string,
     authRefreshMethod   : HttpRequestMethod
@@ -39,9 +39,8 @@ const {
     // auth server:
     authServerURL       = 'http://localhost:3001',
     tokenExpiredStatus  = 403,
-    parseAccessToken    = async (response: unknown): Promise<string> => {
-        if (typeof(response) !== 'object') throw Error('invalid data');
-        const accessToken = (response as any)?.accessToken;
+    selectAccessToken   = (data: {}): string|Promise<string> => {
+        const accessToken = (data as any)?.accessToken;
         if (!accessToken) throw Error('invalid data');
         return accessToken;
     },
@@ -71,7 +70,7 @@ export default {
     // auth server:
     authServerURL,
     tokenExpiredStatus,
-    parseAccessToken,
+    selectAccessToken,
     
     authRefreshPath,
     authRefreshMethod,
