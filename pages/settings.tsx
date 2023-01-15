@@ -1,6 +1,6 @@
 import Head from 'next/head'
 import { Main } from '../components/Main'
-import { RequireAuth } from '../store/features/auth/RequireAuth'
+import { RequireAuth } from '../components/RequireAuth'
 
 
 

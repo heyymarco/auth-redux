@@ -9,13 +9,15 @@ export interface RequireAuthProps {
      * `undefined`           : public access.  
      * `[]`                  : all logged in users.  
      * `['admin']`           : only admins.  
-     * `['admin', 'editor']` : only admins and editors.  
+     * `['admin', 'editor']` : only admins -or- editors.  
      */
     roles               ?: (string|number)[]
     
     
     
     // pages:
+    loadingPage         ?: React.ReactElement
+    errorPage           ?: React.ReactElement
     unauthenticatedPage ?: React.ReactElement
     unauthorizedPage    ?: React.ReactElement
     
@@ -24,7 +26,7 @@ export interface RequireAuthProps {
     // children:
     children            ?: React.ReactNode
 }
-export const RequireAuth = ({roles: requiredRoles, unauthenticatedPage, unauthorizedPage, children}: RequireAuthProps) => {
+export const RequireAuth = ({roles: requiredRoles, loadingPage, errorPage, unauthenticatedPage, unauthorizedPage, children}: RequireAuthProps) => {
     const {isLoading, isError, data: auth} = useAuth();
     
     
@@ -54,6 +56,9 @@ export const RequireAuth = ({roles: requiredRoles, unauthenticatedPage, unauthor
         // all security checks passed:
         return true;
     }, [requiredRoles, auth]);
+    
+    if (isLoading)          return loadingPage         ?? null;
+    if (isError)            return errorPage           ?? null;
     
     if (hasAccess === null) return unauthenticatedPage ?? null;
     if (hasAccess !== true) return unauthorizedPage    ?? null;

@@ -1,7 +1,7 @@
 import { Button } from '@reusable-ui/components';
 import Head from 'next/head'
 import { useRouter } from 'next/router';
-import { Main } from '../components/Main'
+import { Main } from '../Main'
 
 
 
