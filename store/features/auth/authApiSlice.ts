@@ -65,7 +65,7 @@ export interface AuthOptions {
     // auth server:
     authServerURL       ?: string
     tokenExpiredStatus  ?: number|string|(number|string)[],
-    selectAccessToken   ?: (data: {}) => string|Promise<string>
+    selectAccessToken   ?: (data: {}) => AccessToken|Promise<AccessToken>
     
     authRefreshPath     ?: string,
     authRefreshMethod   ?: HttpRequestMethod
@@ -87,7 +87,7 @@ const configureOptions = (options?: AuthOptions): Required<AuthOptions> => {
         // auth server:
         authServerURL       = 'http://localhost:3001',
         tokenExpiredStatus  = 403,
-        selectAccessToken   = (data: {}): string|Promise<string> => {
+        selectAccessToken   = (data: {}): AccessToken|Promise<AccessToken> => {
             const accessToken = (data as any)?.accessToken;
             if (!accessToken) throw Error('invalid data');
             return accessToken;
