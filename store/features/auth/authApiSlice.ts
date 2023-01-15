@@ -78,6 +78,8 @@ let authApi : {
     unsubscribe        : () => void
     getAccessToken     : () => AccessToken|undefined
     refreshAccessToken : () => Promise<AccessToken|undefined>
+    logout             : () => void
+    forceNoAccessToken : boolean
 } | undefined = undefined;
 
 
@@ -92,58 +94,66 @@ export const injectAuthApiSlice = <
     TEnhancers   extends ModuleName
 >(apiSlice: Api<TBaseQuery, TDefinitions, TReducerPath, TTagTypes, TEnhancers>) => {
     // inject auth endpoints:
-    const injectedAuthApiSlice = (apiSlice as unknown as Api<BaseQueryFn, {}, TReducerPath, TTagTypes, typeof coreModuleName | typeof reactHooksModuleName>).injectEndpoints({
-        endpoints  : (builder) => ({
-            auth   : builder.query<AccessToken, void>({
-                query : fetchRefreshToken,
-                async transformResponse(response, meta, arg) {
-                    // parse the response to get `accessToken`:
-                    return await config.parseAccessToken(response);
-                },
-                onCacheEntryAdded(arg, api) {
-                    createAuthApiIfNeeded(api);
-                },
+    const injectedAuthApiSlice = (
+        (apiSlice as unknown as Api<BaseQueryFn, {}, TReducerPath, TTagTypes, typeof coreModuleName | typeof reactHooksModuleName>)
+        .enhanceEndpoints({
+            addTagTypes : config.tagTypes,
+        })
+        .injectEndpoints({
+            endpoints  : (builder) => ({
+                auth   : builder.query<AccessToken, void>({
+                    query : fetchRefreshToken,
+                    async transformResponse(response, meta, arg) {
+                        // parse the response to get `accessToken`:
+                        return await config.parseAccessToken(response);
+                    },
+                    onCacheEntryAdded(arg, api) {
+                        createAuthApiIfNeeded(api);
+                    },
+                    providesTags : config.tagTypes,
+                }),
+                login  : builder.mutation<AccessToken, Credential>({
+                    query : fetchLogin,
+                    async transformResponse(response, meta, arg) {
+                        // parse the response to get `accessToken`:
+                        return await config.parseAccessToken(response);
+                    },
+                    async onCacheEntryAdded(credential, api) {
+                        createAuthApiIfNeeded(api);
+                        
+                        
+                        
+                        let accessToken : AccessToken|undefined = undefined;
+                        try {
+                            // wait until the login mutation is `fulfilled`, so the `data` can be consumed:
+                            accessToken = (await api.cacheDataLoaded).data;
+                        }
+                        catch {
+                            // no-op in case `cacheEntryRemoved` resolves before `cacheDataLoaded`,
+                            // in which case `cacheDataLoaded` will throw
+                        } // try
+                        
+                        
+                        
+                        if (accessToken) {
+                            // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
+                            await api.dispatch(
+                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, undefined, accessToken)
+                            );
+                        } // if
+                    },
+                }),
+                logout : builder.mutation<void, void>({
+                    query : fetchLogout,
+                    transformResponse(response, meta, arg) {
+                        // no need to store any data:
+                        return undefined;
+                    },
+                    invalidatesTags : config.tagTypes,
+                }),
             }),
-            login  : builder.mutation<AccessToken, Credential>({
-                query : fetchLogin,
-                async transformResponse(response, meta, arg) {
-                    // parse the response to get `accessToken`:
-                    return await config.parseAccessToken(response);
-                },
-                async onCacheEntryAdded(credential, api) {
-                    createAuthApiIfNeeded(api);
-                    
-                    
-                    
-                    let accessToken : AccessToken|undefined = undefined;
-                    try {
-                        // wait until the login mutation is `fulfilled`, so the `data` can be consumed:
-                        accessToken = (await api.cacheDataLoaded).data;
-                    }
-                    catch {
-                        // no-op in case `cacheEntryRemoved` resolves before `cacheDataLoaded`,
-                        // in which case `cacheDataLoaded` will throw
-                    } // try
-                    
-                    
-                    
-                    if (accessToken) {
-                        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
-                        await api.dispatch(
-                            injectedAuthApiSlice.util.upsertQueryData('auth' as any, undefined, accessToken)
-                        );
-                    } // if
-                },
-            }),
-            logout : builder.mutation<void, void>({
-                query : fetchLogout,
-                transformResponse(response, meta, arg) {
-                    // no need to store any data:
-                    return undefined;
-                },
-            }),
-        }),
-    });
+        })
+    );
     
     
     
@@ -163,19 +173,45 @@ export const injectAuthApiSlice = <
             getAccessToken     : () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data,
             
             refreshAccessToken : async () => {
+                try {
+                    if (authApi) authApi.forceNoAccessToken = true;
+                    
+                    
+                    
+                    const processing  = api.dispatch(
+                        injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
+                    );
+                    try {
+                        return await processing.unwrap();
+                    }
+                    catch {
+                        return undefined;
+                    }
+                    finally {
+                        processing.unsubscribe();
+                    } // try
+                }
+                finally {
+                    if (authApi) authApi.forceNoAccessToken = false;
+                }
+            },
+            
+            logout             : async () => {
                 const processing  = api.dispatch(
-                    injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
+                    injectedAuthApiSlice.endpoints.logout.initiate()
                 );
                 try {
                     return await processing.unwrap();
                 }
-                catch (err) {
+                catch {
                     return undefined;
                 }
                 finally {
                     processing.unsubscribe();
                 } // try
             },
+            
+            forceNoAccessToken : false,
         };
     };
     
@@ -245,7 +281,7 @@ const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
 export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBaseQuery>): ReturnType<typeof fetchBaseQuery> => {
     const interceptedBaseQueryFn : typeof baseQueryFn = async (args, api, extraOptions) => {
         // the initial query:
-        let accessToken = authApi?.getAccessToken();
+        let accessToken = authApi?.forceNoAccessToken ? undefined : authApi?.getAccessToken();
         let result      = await baseQueryFn(accessToken ? injectArgs(args, accessToken) : args, api, extraOptions);
         
         
@@ -260,7 +296,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
             }
             else {
                 // failed to re-generate accessToken because the user was loggedOut or the refreshToken was expired
-                // TODO: logout()
+                await authApi?.logout();
             }
         } // if
         

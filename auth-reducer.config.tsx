@@ -14,7 +14,7 @@ export default {
         return accessToken;
     },
     
-    authRefreshPath     : 'refresh',
+    authRefreshPath     : '/refresh',
     authRefreshMethod   : 'POST',
     
     loginPath           : '/login',
@@ -26,6 +26,7 @@ export default {
     
     
     // behaviors:
+    tagTypes            : ['Auth'],
     persistLoginKey     : 'persistLogin',
     defaultPersistLogin : false,
     
