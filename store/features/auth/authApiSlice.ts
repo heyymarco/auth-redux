@@ -200,7 +200,7 @@ export const injectAuthApiSlice = <
                     return undefined;
                 }
                 finally {
-                    processing.unsubscribe();
+                    processing.reset();
                 } // try
             },
         };
