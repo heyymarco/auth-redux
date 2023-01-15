@@ -34,6 +34,9 @@ import type {
     reactHooksModuleName,
 }                               from '@reduxjs/toolkit/dist/query/react/module'
 
+// jwt:
+import jwt_decode               from 'jwt-decode'
+
 
 
 // types:
@@ -47,8 +50,8 @@ export type AccessToken    = string  & {}
 
 
 // shared apis:
+let authConfig         : Required<AuthOptions>|undefined = undefined;
 let authApi : {
-    config             : Required<AuthOptions>
     unsubscribe        : () => void
     getAccessToken     : () => Promise<AccessToken|null|undefined>
     refreshAccessToken : () => Promise<AccessToken|null|undefined>
@@ -65,7 +68,10 @@ export interface AuthOptions {
     // auth server:
     authServerURL       ?: string
     tokenExpiredStatus  ?: number|string|(number|string)[],
-    selectAccessToken   ?: (data: {}) => AccessToken|Promise<AccessToken>
+    
+    selectAccessToken   ?: (auth: Authentication) => AccessToken
+    selectUsername      ?: (decoded: {}) => (string|number)
+    selectRoles         ?: (decoded: {}) => (string|number)[]
     
     authRefreshPath     ?: string,
     authRefreshMethod   ?: HttpRequestMethod
@@ -87,10 +93,22 @@ const configureOptions = (options?: AuthOptions): Required<AuthOptions> => {
         // auth server:
         authServerURL       = 'http://localhost:3001',
         tokenExpiredStatus  = 403,
-        selectAccessToken   = (data: {}): AccessToken|Promise<AccessToken> => {
-            const accessToken = (data as any)?.accessToken;
-            if (!accessToken) throw Error('invalid data');
+        
+        selectAccessToken   = (auth: Authentication): AccessToken => {
+            const accessToken = (auth as any)?.accessToken;
+            if ((accessToken === undefined) || (accessToken === null)) throw Error('invalid data');
             return accessToken;
+        },
+        selectUsername      = (decoded: {}): (string|number) => {
+            const username = (decoded as any)?.username;
+            if ((username === undefined) || (username === null)) throw Error('invalid data');
+            return username;
+        },
+        selectRoles         = (decoded: {}): (string|number)[] => {
+            const roles = (decoded as any)?.username;
+            if ((roles === undefined) || (roles === null)) throw Error('invalid data');
+            if (!Array.isArray(roles)) return [roles];
+            return roles;
         },
         
         authRefreshPath     = 'refresh',
@@ -115,7 +133,10 @@ const configureOptions = (options?: AuthOptions): Required<AuthOptions> => {
         // auth server:
         authServerURL,
         tokenExpiredStatus,
+        
         selectAccessToken,
+        selectUsername,
+        selectRoles,
         
         authRefreshPath,
         authRefreshMethod,
@@ -147,6 +168,7 @@ export const injectAuthApiSlice = <
 >(apiSlice: Api<TBaseQuery, TDefinitions, TReducerPath, TTagTypes, TEnhancers>, options?: AuthOptions) => {
     // configurations:
     const config = configureOptions(options);
+    authConfig = config;
     
     
     
@@ -246,8 +268,6 @@ export const injectAuthApiSlice = <
     ): void => {
         if (authApi) return;
         authApi = {
-            config,
-            
             // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
             unsubscribe        : api.dispatch(
                 injectedAuthApiSlice.endpoints.auth.initiate(undefined)
@@ -257,7 +277,7 @@ export const injectAuthApiSlice = <
             getAccessToken     : async () => {
                 const authentication = injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data;
                 if ((authentication === undefined) || (authentication === null)) return authentication;
-                return await config.selectAccessToken(authentication);
+                return config.selectAccessToken(authentication);
             },
             
             refreshAccessToken : async () => {
@@ -267,7 +287,7 @@ export const injectAuthApiSlice = <
                 try {
                     const authentication = await processing.unwrap();
                     if ((authentication === undefined) || (authentication === null)) return authentication;
-                    return await config.selectAccessToken(authentication);
+                    return config.selectAccessToken(authentication);
                 }
                 catch {
                     return undefined;
@@ -367,7 +387,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
         
         
         // re-auth:
-        if (result.error && accessToken && authApi && [authApi.config.tokenExpiredStatus].flat().includes(result.error.status)) {
+        if (result.error && accessToken && authApi && authConfig && [authConfig.tokenExpiredStatus].flat().includes(result.error.status)) {
             // re-generate accessToken:
             accessToken = await authApi.refreshAccessToken();
             if (accessToken) {
@@ -386,4 +406,34 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
         return result;
     };
     return interceptedBaseQueryFn;
+};
+
+
+
+// selectors:
+export const selectUsername = (auth: Authentication): ReturnType<Required<AuthOptions>['selectUsername']> => {
+    if (!authConfig) throw Error('`authApiSlice` was not configured');
+    
+    
+    
+    const accessToken = authConfig.selectAccessToken(auth);
+    const decoded = jwt_decode(accessToken);
+    if ((decoded === undefined) || (decoded === null)) throw Error('invalid data');
+    
+    
+    
+    return authConfig.selectUsername(decoded);
+};
+export const selectRoles = (auth: Authentication): ReturnType<Required<AuthOptions>['selectRoles']> => {
+    if (!authConfig) throw Error('`authApiSlice` was not configured');
+    
+    
+    
+    const accessToken = authConfig.selectAccessToken(auth);
+    const decoded = jwt_decode(accessToken);
+    if ((decoded === undefined) || (decoded === null)) throw Error('invalid data');
+    
+    
+    
+    return authConfig.selectRoles(decoded);
 };
