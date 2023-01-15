@@ -79,7 +79,6 @@ let authApi : {
     getAccessToken     : () => AccessToken|undefined
     refreshAccessToken : () => Promise<AccessToken|undefined>
     logout             : () => void
-    forceNoAccessToken : boolean
 } | undefined = undefined;
 
 
@@ -173,27 +172,18 @@ export const injectAuthApiSlice = <
             getAccessToken     : () => injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data,
             
             refreshAccessToken : async () => {
+                const processing  = api.dispatch(
+                    injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
+                );
                 try {
-                    if (authApi) authApi.forceNoAccessToken = true;
-                    
-                    
-                    
-                    const processing  = api.dispatch(
-                        injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
-                    );
-                    try {
-                        return await processing.unwrap();
-                    }
-                    catch {
-                        return undefined;
-                    }
-                    finally {
-                        processing.unsubscribe();
-                    } // try
+                    return await processing.unwrap();
+                }
+                catch {
+                    return undefined;
                 }
                 finally {
-                    if (authApi) authApi.forceNoAccessToken = false;
-                }
+                    processing.unsubscribe();
+                } // try
             },
             
             logout             : async () => {
@@ -210,8 +200,6 @@ export const injectAuthApiSlice = <
                     processing.unsubscribe();
                 } // try
             },
-            
-            forceNoAccessToken : false,
         };
     };
     
@@ -281,8 +269,9 @@ const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
 export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBaseQuery>): ReturnType<typeof fetchBaseQuery> => {
     const interceptedBaseQueryFn : typeof baseQueryFn = async (args, api, extraOptions) => {
         // the initial query:
-        let accessToken = authApi?.forceNoAccessToken ? undefined : authApi?.getAccessToken();
-        let result      = await baseQueryFn(accessToken ? injectArgs(args, accessToken) : args, api, extraOptions);
+        const forceNoAccessToken = ['auth', 'login', 'logout'].includes(api.endpoint);
+        let accessToken          = forceNoAccessToken ? undefined : authApi?.getAccessToken();
+        let result               = await baseQueryFn(accessToken ? injectArgs(args, accessToken) : args, api, extraOptions);
         
         
         
