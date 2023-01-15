@@ -1,5 +1,6 @@
 import type {
     AuthOptions,
+    AccessToken,
 }                               from './store/features/auth/authApiSlice';
 
 
@@ -8,7 +9,7 @@ const options : AuthOptions = {
     // auth server:
     authServerURL       : 'http://localhost:3001',
     tokenExpiredStatus  : 403,
-    selectAccessToken   : (data: {}): string|Promise<string> => {
+    selectAccessToken   : (data: {}): AccessToken|Promise<AccessToken> => {
         const accessToken = (data as any)?.accessToken;
         if (!accessToken) throw Error('invalid data');
         return accessToken;
