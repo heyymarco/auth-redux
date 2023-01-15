@@ -1,4 +1,4 @@
-// redux:
+// redux toolkit:
 import type {
     // fetches:
     BaseQueryFn,
@@ -23,20 +23,16 @@ import type {
     MutationCacheLifecycleApi,
 }                               from '@reduxjs/toolkit/dist/query/endpointDefinitions'
 
-// vanilla-redux:
+// vanilla redux toolkit:
 import type {
     coreModuleName,
 }                               from '@reduxjs/toolkit/dist/query/core/module'
 
-// react-redux:
+// react redux toolkit:
 import type {
     // react specific hooks:
     reactHooksModuleName,
 }                               from '@reduxjs/toolkit/dist/query/react/module'
-
-// internals:
-import config                   from './authConfig'
-
 
 
 
@@ -50,27 +46,9 @@ export type AccessToken    = string  & {}
 
 
 
-// handlers:
-const fetchRefreshToken = () : FetchArgs => ({
-    url             : config.authRefreshPath,
-    method          : config.authRefreshMethod,
-    credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
-    responseHandler : 'content-type',
-});
-const fetchLogin = (credential: Credential) : FetchArgs => ({
-    url             : config.loginPath,
-    method          : config.loginMethod,
-    credentials     : 'include',           // need to RECEIVE `refreshToken` in the `http_only_cookie`
-    body            : credential,          // post the username, password (and optionally additional properties) to be verified on backend
-    responseHandler : 'content-type',
-});
-const fetchLogout = () : FetchArgs => ({
-    url             : config.logoutPath,
-    method          : config.logoutMethod,
-    credentials     : 'include',           // need to DELETE `refreshToken` in the `http_only_cookie`
-    responseHandler : 'content-type',
-});
+// shared apis:
 let authApi : {
+    config             : Required<AuthOptions>
     unsubscribe        : () => void
     getAccessToken     : () => Promise<AccessToken|null|undefined>
     refreshAccessToken : () => Promise<AccessToken|null|undefined>
@@ -81,26 +59,121 @@ let authApi : {
 
 // actions:
 
+export type HttpRequestMethod = 'GET'|'HEAD'|'POST'|'PUT'|'DELETE'|'CONNECT'|'OPTIONS'|'TRACE'|'PATCH'|(string & {});
+
+export interface AuthOptions {
+    // auth server:
+    authServerURL       ?: string
+    tokenExpiredStatus  ?: number|string|(number|string)[],
+    selectAccessToken   ?: (data: {}) => string|Promise<string>
+    
+    authRefreshPath     ?: string,
+    authRefreshMethod   ?: HttpRequestMethod
+    
+    loginPath           ?: string
+    loginMethod         ?: HttpRequestMethod
+    
+    logoutPath          ?: string
+    logoutMethod        ?: HttpRequestMethod
+    
+    
+    
+    // behaviors:
+    persistLoginKey     ?: string,
+    defaultPersistLogin ?: boolean,
+}
+const configureOptions = (options?: AuthOptions): Required<AuthOptions> => {
+    const {
+        // auth server:
+        authServerURL       = 'http://localhost:3001',
+        tokenExpiredStatus  = 403,
+        selectAccessToken   = (data: {}): string|Promise<string> => {
+            const accessToken = (data as any)?.accessToken;
+            if (!accessToken) throw Error('invalid data');
+            return accessToken;
+        },
+        
+        authRefreshPath     = 'refresh',
+        authRefreshMethod   = 'GET',
+        
+        loginPath           = '/login',
+        loginMethod         = 'POST',
+        
+        logoutPath          = '/logout',
+        logoutMethod        = 'POST',
+        
+        
+        
+        // behaviors:
+        persistLoginKey     = 'persistLogin',
+        defaultPersistLogin = false,
+    ...restOptions} = options ?? {};
+    
+    
+    
+    return {
+        // auth server:
+        authServerURL,
+        tokenExpiredStatus,
+        selectAccessToken,
+        
+        authRefreshPath,
+        authRefreshMethod,
+        
+        loginPath,
+        loginMethod,
+        
+        logoutPath,
+        logoutMethod,
+        
+        
+        
+        // behaviors:
+        persistLoginKey,
+        defaultPersistLogin,
+        
+        
+        
+        ...restOptions
+    };
+};
+
 export const injectAuthApiSlice = <
     TBaseQuery   extends BaseQueryFn,
     TDefinitions extends EndpointDefinitions,
     TReducerPath extends string,
     TTagTypes    extends string,
     TEnhancers   extends ModuleName
->(apiSlice: Api<TBaseQuery, TDefinitions, TReducerPath, TTagTypes, TEnhancers>) => {
+>(apiSlice: Api<TBaseQuery, TDefinitions, TReducerPath, TTagTypes, TEnhancers>, options?: AuthOptions) => {
+    // configurations:
+    const config = configureOptions(options);
+    
+    
+    
     // inject auth endpoints:
     const injectedAuthApiSlice = (
         (apiSlice as unknown as Api<BaseQueryFn, {}, TReducerPath, TTagTypes, typeof coreModuleName | typeof reactHooksModuleName>)
         .injectEndpoints({
             endpoints  : (builder) => ({
                 auth   : builder.query<Authentication, void>({
-                    query : fetchRefreshToken,
+                    query : () => ({
+                        url             : config.authRefreshPath,
+                        method          : config.authRefreshMethod,
+                        credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
+                        responseHandler : 'content-type',
+                    }),
                     onCacheEntryAdded(arg, api) {
                         createAuthApiIfNeeded(api);
                     },
                 }),
                 login  : builder.mutation<Authentication, Credential>({
-                    query : fetchLogin,
+                    query : (credential: Credential) => ({
+                        url             : config.loginPath,
+                        method          : config.loginMethod,
+                        credentials     : 'include',           // need to RECEIVE `refreshToken` in the `http_only_cookie`
+                        body            : credential,          // post the username, password (and optionally additional properties) to be verified on backend
+                        responseHandler : 'content-type',
+                    }),
                     async onCacheEntryAdded(credential, api) {
                         createAuthApiIfNeeded(api);
                         
@@ -128,7 +201,12 @@ export const injectAuthApiSlice = <
                     },
                 }),
                 logout : builder.mutation<void, boolean|undefined>({
-                    query : fetchLogout,
+                    query : () => ({
+                        url             : config.logoutPath,
+                        method          : config.logoutMethod,
+                        credentials     : 'include',           // need to DELETE `refreshToken` in the `http_only_cookie`
+                        responseHandler : 'content-type',
+                    }),
                     transformResponse(response, meta, arg) {
                         // no need to store any data:
                         return undefined;
@@ -168,6 +246,8 @@ export const injectAuthApiSlice = <
     ): void => {
         if (authApi) return;
         authApi = {
+            config,
+            
             // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
             unsubscribe        : api.dispatch(
                 injectedAuthApiSlice.endpoints.auth.initiate(undefined)
@@ -287,9 +367,9 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
         
         
         // re-auth:
-        if (accessToken && result.error && [config.tokenExpiredStatus].flat().includes(result.error.status)) {
+        if (result.error && accessToken && authApi && [authApi.config.tokenExpiredStatus].flat().includes(result.error.status)) {
             // re-generate accessToken:
-            accessToken = await authApi?.refreshAccessToken();
+            accessToken = await authApi.refreshAccessToken();
             if (accessToken) {
                 // retry the initial query with a new accessToken:
                 result  = await baseQueryFn(injectArgs(args, accessToken), api, extraOptions);
@@ -297,7 +377,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
             else {
                 // failed to re-generate accessToken because the user was loggedOut or the refreshToken was expired
                 // it's safe to `forceLogout` because the refreshToken is no longer valid
-                await authApi?.logout(/* forceLogout: */true);
+                await authApi.logout(/* forceLogout: */true);
             }
         } // if
         

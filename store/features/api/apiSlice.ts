@@ -1,6 +1,18 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
-import { fetchBaseQueryWithReauth, injectAuthApiSlice } from '../auth/authApiSlice';
-export * from '../auth/authApiSlice';
+// redux toolkit:
+import {
+    createApi,
+    fetchBaseQuery,
+}                               from '@reduxjs/toolkit/query/react'
+
+// redux auth:
+import {
+    fetchBaseQueryWithReauth,
+    injectAuthApiSlice,
+}                               from '../auth/authApiSlice'
+export *                        from '../auth/authApiSlice'
+
+// internals:
+import config                   from '../../../redux-auth.config'
 
 
 
@@ -30,4 +42,4 @@ export const {
     useAuth,
     useLogin,
     useLogout,
-} = injectAuthApiSlice(apiSlice);
+} = injectAuthApiSlice(apiSlice, config);

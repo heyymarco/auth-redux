@@ -1,9 +1,10 @@
-import React from 'react'
-import Unauthorized from './pages/unauthorized'
+import type {
+    AuthOptions,
+}                               from './store/features/auth/authApiSlice';
 
 
 
-export default {
+const options : AuthOptions = {
     // auth server:
     authServerURL       : 'http://localhost:3001',
     tokenExpiredStatus  : 403,
@@ -27,10 +28,5 @@ export default {
     // behaviors:
     persistLoginKey     : 'persistLogin',
     defaultPersistLogin : false,
-    
-    
-    
-    // pages:
-    loginPage           : '/login',
-    unauthorizedPage    : <Unauthorized />,
-}
+};
+export default options;
