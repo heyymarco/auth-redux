@@ -302,6 +302,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
             }
             else {
                 // failed to re-generate accessToken because the user was loggedOut or the refreshToken was expired
+                // it's safe to `forceLogout` because the refreshToken is no longer valid
                 await authApi?.logout(/* forceLogout: */true);
             }
         } // if
