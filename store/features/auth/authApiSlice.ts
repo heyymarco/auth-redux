@@ -188,7 +188,7 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAccessToken: true,
                     },
-                    async onQueryStarted(arg, api) {
+                    async onQueryStarted(noParam, api) {
                         await createAuthApiIfNeeded(api);
                     },
                 }),
@@ -203,7 +203,7 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAccessToken: true,
                     },
-                    async onQueryStarted(arg, api) {
+                    async onQueryStarted(credential, api) {
                         await createAuthApiIfNeeded(api);
                     },
                     async onCacheEntryAdded(credential, api) {
@@ -223,7 +223,7 @@ export const injectAuthApiSlice = <
                         if (authentication !== undefined) {
                             // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
                             await api.dispatch(
-                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */authentication)
+                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ authentication)
                             );
                         } // if
                     },
@@ -238,7 +238,7 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAccessToken: true,
                     },
-                    transformResponse(response, meta, arg) {
+                    transformResponse(response, meta, forceLogout) {
                         // no need to store any data:
                         return undefined;
                     },
@@ -259,7 +259,7 @@ export const injectAuthApiSlice = <
                             // mark accessToken as loggedOut:
                             // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
                             await api.dispatch(
-                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */null /* = loggedOut */)
+                                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
                             );
                         } // if
                     },
@@ -345,7 +345,7 @@ export const injectAuthApiSlice = <
         // make initial auth as loggedOut:
         // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
         authApi.prefetching = api.dispatch(
-            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */null /* = loggedOut */)
+            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
         ).unwrap();
         
         
