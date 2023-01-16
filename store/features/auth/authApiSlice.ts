@@ -314,10 +314,13 @@ export const injectAuthApiSlice = <
             
             
             
-            // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-            api.dispatch(
-                injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
-            );
+            if (typeof(window) !== 'undefined') { // client side only
+                // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
+                // no need to `await`
+                api.dispatch(
+                    injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
+                );
+            } // if
         });
         
         
