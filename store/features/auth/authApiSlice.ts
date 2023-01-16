@@ -1,5 +1,10 @@
 // redux toolkit:
 import type {
+    // actions:
+    ThunkDispatch,
+    AnyAction,
+}                               from '@reduxjs/toolkit'
+import type {
     // fetches:
     BaseQueryFn,
     fetchBaseQuery,
@@ -46,11 +51,13 @@ export type AccessToken    = string  & {}
 
 
 // shared apis:
-let authConfig         : Required<AuthOptions>|undefined = undefined;
+let authConfig          : Required<AuthOptions>|undefined = undefined;
 let authApi : {
-    getAccessToken     : () => Promise<AccessToken|null|undefined>
-    refreshAccessToken : () => Promise<AccessToken|null|undefined>
-    logout             : (forceLogout?: boolean) => Promise<void>
+    loginStatusResolved : boolean
+    dispatch            : ThunkDispatch<any, any, AnyAction>
+    getAccessToken      : () => Promise<AccessToken|null|undefined>
+    refreshAccessToken  : () => Promise<AccessToken|null|undefined>
+    logout              : (forceLogout?: boolean) => Promise<void>
 } | undefined = undefined;
 
 
@@ -182,6 +189,32 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAuth: true,
                     },
+                    async transformErrorResponse(baseQueryReturnValue, meta, noParam) {
+                        if (authApi) {
+                            if (!authApi.loginStatusResolved) {
+                                const responseStatus = (meta as any)?.response?.status;
+                                if ((responseStatus !== undefined) && authConfig && [authConfig.tokenExpiredStatus].flat().includes(responseStatus)) {
+                                    // response of `tokenExpiredStatus` => treat as loggedOut
+                                    
+                                    
+                                    
+                                    authApi.loginStatusResolved = true;
+                                    
+                                    Promise.resolve().then(() => { // an async hack: mark as loggedOut AFTER `rejected`
+                                        // mark accessToken as loggedOut:
+                                        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
+                                        authApi?.dispatch(
+                                            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
+                                        );
+                                    });
+                                } // if
+                            } // if
+                        } // if
+                        
+                        
+                        
+                        return baseQueryReturnValue; // no transformation, return exactly as server response
+                    },
                 }),
                 login  : builder.mutation<Authentication, Credential>({
                     query : (credential: Credential) => ({
@@ -263,14 +296,18 @@ export const injectAuthApiSlice = <
     injectedAuthApiSlice.middleware = (api) => {
         // setup:
         authApi = {
+            loginStatusResolved : false,
+            
+            dispatch            : api.dispatch,
+            
             // provides the callback for getting the auth data:
-            getAccessToken     : async () => {
+            getAccessToken      : async () => {
                 const authentication = injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any).data;
                 if ((authentication === undefined) || (authentication === null)) return authentication;
                 return config.selectAccessToken(authentication);
             },
             
-            refreshAccessToken : async () => {
+            refreshAccessToken  : async () => {
                 const processing  = api.dispatch(
                     injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: true })
                 );
@@ -287,7 +324,7 @@ export const injectAuthApiSlice = <
                 } // try
             },
             
-            logout             : async (forceLogout) => {
+            logout              : async (forceLogout) => {
                 const processing  = api.dispatch(
                     injectedAuthApiSlice.endpoints.logout.initiate(forceLogout)
                 );
@@ -307,10 +344,12 @@ export const injectAuthApiSlice = <
         
         // prefetch:
         Promise.resolve().then(async () => {
-            // create an initial `auth` cache as loggedOut:
-            await api.dispatch(
-                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
-            );
+            if (authApi?.loginStatusResolved) {
+                // create an initial `auth` cache as loggedOut:
+                await api.dispatch(
+                    injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
+                );
+            } // if
             
             
             
@@ -394,6 +433,15 @@ const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
 
 export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBaseQuery>): ReturnType<typeof fetchBaseQuery> => {
     const interceptedBaseQueryFn : typeof baseQueryFn = async (args, api, extraOptions) => {
+        // TODO: remove this:
+        await new Promise<void>((resolve) => {
+            setTimeout(() => {
+                resolve();
+            }, 10000);
+        });
+        
+        
+        
         // the initial query:
         const forceNoAccessToken = ((extraOptions as any)?.['noAuth'] === true);
         let accessToken          = forceNoAccessToken ? undefined : (await authApi?.getAccessToken());
