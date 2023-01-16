@@ -186,7 +186,7 @@ export const injectAuthApiSlice = <
                         responseHandler : 'content-type',
                     }),
                     extraOptions: {
-                        noAccessToken: true,
+                        noAuth: true,
                     },
                     async onQueryStarted(noParam, api) {
                         await createAuthApiIfNeeded(api);
@@ -201,7 +201,7 @@ export const injectAuthApiSlice = <
                         responseHandler : 'content-type',
                     }),
                     extraOptions: {
-                        noAccessToken: true,
+                        noAuth: true,
                     },
                     async onQueryStarted(credential, api) {
                         await createAuthApiIfNeeded(api);
@@ -236,7 +236,7 @@ export const injectAuthApiSlice = <
                         responseHandler : 'content-type',
                     }),
                     extraOptions: {
-                        noAccessToken: true,
+                        noAuth: true,
                     },
                     transformResponse(response, meta, forceLogout) {
                         // no need to store any data:
@@ -420,7 +420,7 @@ const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
 export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBaseQuery>): ReturnType<typeof fetchBaseQuery> => {
     const interceptedBaseQueryFn : typeof baseQueryFn = async (args, api, extraOptions) => {
         // the initial query:
-        const forceNoAccessToken = ((extraOptions as any)?.['noAccessToken'] === true);
+        const forceNoAccessToken = ((extraOptions as any)?.['noAuth'] === true);
         let accessToken          = forceNoAccessToken ? undefined : (await authApi?.getAccessToken());
         let result               = await baseQueryFn(accessToken ? injectArgs(args, accessToken) : args, api, extraOptions);
         
