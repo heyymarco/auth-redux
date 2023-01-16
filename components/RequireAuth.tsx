@@ -9,6 +9,8 @@ import Unauthorized from './pages/Unauthorized';
 export const RequireAuth = (props: RequireAuthProps) => {
     return (
         <BaseRequireAuth
+            {...props}
+            
             loadingPage         = {props.loadingPage         ?? <LoggingIn />    }
             errorPage           = {props.errorPage           ?? <LoginFailed />  }
             unauthenticatedPage = {props.unauthenticatedPage ?? <RedirectLogin />}

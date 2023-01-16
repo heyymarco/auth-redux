@@ -15,8 +15,17 @@ export default function RedirectLogin() {
         // router.replace(loginPath, { query: { from: router.pathname } });
         
         // works:
-        if (typeof(window) !== 'undefined') router.replace(loginPath);
-        router.replace(loginPath, { query: { from: router.pathname } });
+        router.replace(loginPath);
+        const cancelRedirect = setTimeout(() => {
+            router.replace(loginPath, { query: { from: router.pathname } });
+        }, 0);
+        
+        
+        
+        // cleanups:
+        return () => {
+            clearTimeout(cancelRedirect);
+        };
     }, []);
     
     
