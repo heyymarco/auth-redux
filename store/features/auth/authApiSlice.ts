@@ -52,8 +52,6 @@ export type AccessToken    = string  & {}
 // shared apis:
 let authConfig         : Required<AuthOptions>|undefined = undefined;
 let authApi : {
-    prefetching        : Promise<unknown>|undefined
-    unsubscribe        : () => void
     getAccessToken     : () => Promise<AccessToken|null|undefined>
     refreshAccessToken : () => Promise<AccessToken|null|undefined>
     logout             : (forceLogout?: boolean) => void
@@ -189,7 +187,7 @@ export const injectAuthApiSlice = <
                         noAuth: true,
                     },
                     async onQueryStarted(noParam, api) {
-                        await createAuthApiIfNeeded(api);
+                        createAuthApiIfNeeded(api);
                     },
                 }),
                 login  : builder.mutation<Authentication, Credential>({
@@ -204,7 +202,7 @@ export const injectAuthApiSlice = <
                         noAuth: true,
                     },
                     async onQueryStarted(credential, api) {
-                        await createAuthApiIfNeeded(api);
+                        createAuthApiIfNeeded(api);
                     },
                     async onCacheEntryAdded(credential, api) {
                         let authentication : Authentication|undefined = undefined;
@@ -271,17 +269,12 @@ export const injectAuthApiSlice = <
     
     
     // utils:
-    const createAuthApiIfNeeded = async (
+    const createAuthApiIfNeeded = (
         api: | QueryLifecycleApi<void, BaseQueryFn<any, unknown, unknown, {}, {}>, {}, TReducerPath>
              | MutationLifecycleApi<Credential, BaseQueryFn<any, unknown, unknown, {}, {}>, {}, TReducerPath>
-    ): Promise<void> => {
+    ): void => {
         // conditions:
         if (authApi) {
-            // wait until fully prefetched:
-            await authApi.prefetching;
-            
-            
-            
             // `AuthApi` is already created, immediately return:
             return;
         } // if
@@ -291,13 +284,6 @@ export const injectAuthApiSlice = <
         // result:
         // immediately assign `authApi` variable to prevent race-request condition:
         authApi = {
-            prefetching : undefined,
-            
-            // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-            unsubscribe        : api.dispatch(
-                injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
-            ).unsubscribe,
-            
             // provides the callback for getting the auth data:
             getAccessToken     : async () => {
                 const authentication = injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data;
@@ -337,21 +323,31 @@ export const injectAuthApiSlice = <
                 } // try
             },
         };
+    };
+    
+    
+    
+    // prefetch:
+    const apiMiddleware = injectedAuthApiSlice.middleware;
+    injectedAuthApiSlice.middleware = (storeApi) => {
+        Promise.resolve().then(async () => {
+            // create an initial `auth` cache as loggedOut:
+            await storeApi.dispatch(
+                injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
+            );
+            
+            
+            
+            // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
+            storeApi.dispatch(
+                injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
+            );
+        });
         
         
         
-        // prefetch:
-        
-        // make initial auth as loggedOut:
-        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
-        authApi.prefetching = api.dispatch(
-            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
-        ).unwrap();
-        
-        
-        
-        // wait until fully prefetched:
-        await authApi.prefetching;
+        // return the original middleware:
+        return apiMiddleware(storeApi);
     };
     
     
