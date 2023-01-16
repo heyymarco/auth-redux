@@ -19,8 +19,8 @@ import type {
     ModuleName,
 }                               from '@reduxjs/toolkit/dist/query/apiTypes'
 import type {
-    QueryCacheLifecycleApi,
-    MutationCacheLifecycleApi,
+    QueryLifecycleApi,
+    MutationLifecycleApi,
 }                               from '@reduxjs/toolkit/dist/query/endpointDefinitions'
 
 // vanilla redux toolkit:
@@ -52,7 +52,7 @@ export type AccessToken    = string  & {}
 // shared apis:
 let authConfig         : Required<AuthOptions>|undefined = undefined;
 let authApi : {
-    prefetching        : Promise<unknown>
+    prefetching        : Promise<unknown>|undefined
     unsubscribe        : () => void
     getAccessToken     : () => Promise<AccessToken|null|undefined>
     refreshAccessToken : () => Promise<AccessToken|null|undefined>
@@ -188,7 +188,7 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAccessToken: true,
                     },
-                    async onCacheEntryAdded(arg, api) {
+                    async onQueryStarted(arg, api) {
                         await createAuthApiIfNeeded(api);
                     },
                 }),
@@ -203,11 +203,10 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAccessToken: true,
                     },
-                    async onCacheEntryAdded(credential, api) {
+                    async onQueryStarted(arg, api) {
                         await createAuthApiIfNeeded(api);
-                        
-                        
-                        
+                    },
+                    async onCacheEntryAdded(credential, api) {
                         let authentication : Authentication|undefined = undefined;
                         try {
                             // wait until the login mutation is `fulfilled`, so the `data` can be consumed:
@@ -273,8 +272,8 @@ export const injectAuthApiSlice = <
     
     // utils:
     const createAuthApiIfNeeded = async (
-        api: | QueryCacheLifecycleApi<void,          BaseQueryFn<any, unknown, unknown, {}, {}>, Authentication, TReducerPath>
-             | MutationCacheLifecycleApi<Credential, BaseQueryFn<any, unknown, unknown, {}, {}>, Authentication, TReducerPath>
+        api: | QueryLifecycleApi<void, BaseQueryFn<any, unknown, unknown, {}, {}>, {}, TReducerPath>
+             | MutationLifecycleApi<Credential, BaseQueryFn<any, unknown, unknown, {}, {}>, {}, TReducerPath>
     ): Promise<void> => {
         // conditions:
         if (authApi) {
@@ -289,20 +288,10 @@ export const injectAuthApiSlice = <
         
         
         
-        // prefetch:
-        
-        // make initial auth as loggedOut:
-        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
-        const prefetching = api.dispatch(
-            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */null /* = loggedOut */)
-        ).unwrap();
-        
-        
-        
         // result:
         // immediately assign `authApi` variable to prevent race-request condition:
         authApi = {
-            prefetching : prefetching,
+            prefetching : undefined,
             
             // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
             unsubscribe        : api.dispatch(
@@ -351,8 +340,18 @@ export const injectAuthApiSlice = <
         
         
         
+        // prefetch:
+        
+        // make initial auth as loggedOut:
+        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
+        authApi.prefetching = api.dispatch(
+            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* arg: */ undefined, /* data: */null /* = loggedOut */)
+        ).unwrap();
+        
+        
+        
         // wait until fully prefetched:
-        await prefetching;
+        await authApi.prefetching;
     };
     
     
