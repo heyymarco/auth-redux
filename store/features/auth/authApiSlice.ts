@@ -18,10 +18,6 @@ import type {
     // modules:
     ModuleName,
 }                               from '@reduxjs/toolkit/dist/query/apiTypes'
-import type {
-    QueryLifecycleApi,
-    MutationLifecycleApi,
-}                               from '@reduxjs/toolkit/dist/query/endpointDefinitions'
 
 // vanilla redux toolkit:
 import type {
@@ -54,7 +50,7 @@ let authConfig         : Required<AuthOptions>|undefined = undefined;
 let authApi : {
     getAccessToken     : () => Promise<AccessToken|null|undefined>
     refreshAccessToken : () => Promise<AccessToken|null|undefined>
-    logout             : (forceLogout?: boolean) => void
+    logout             : (forceLogout?: boolean) => Promise<void>
 } | undefined = undefined;
 
 
@@ -186,9 +182,6 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAuth: true,
                     },
-                    async onQueryStarted(noParam, api) {
-                        createAuthApiIfNeeded(api);
-                    },
                 }),
                 login  : builder.mutation<Authentication, Credential>({
                     query : (credential: Credential) => ({
@@ -200,9 +193,6 @@ export const injectAuthApiSlice = <
                     }),
                     extraOptions: {
                         noAuth: true,
-                    },
-                    async onQueryStarted(credential, api) {
-                        createAuthApiIfNeeded(api);
                     },
                     async onCacheEntryAdded(credential, api) {
                         let authentication : Authentication|undefined = undefined;
@@ -268,25 +258,14 @@ export const injectAuthApiSlice = <
     
     
     
-    // utils:
-    const createAuthApiIfNeeded = (
-        api: | QueryLifecycleApi<void, BaseQueryFn<any, unknown, unknown, {}, {}>, {}, TReducerPath>
-             | MutationLifecycleApi<Credential, BaseQueryFn<any, unknown, unknown, {}, {}>, {}, TReducerPath>
-    ): void => {
-        // conditions:
-        if (authApi) {
-            // `AuthApi` is already created, immediately return:
-            return;
-        } // if
-        
-        
-        
-        // result:
-        // immediately assign `authApi` variable to prevent race-request condition:
+    // initialization:
+    const apiMiddleware = injectedAuthApiSlice.middleware;
+    injectedAuthApiSlice.middleware = (api) => {
+        // setup:
         authApi = {
             // provides the callback for getting the auth data:
             getAccessToken     : async () => {
-                const authentication = injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState()).data;
+                const authentication = injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any).data;
                 if ((authentication === undefined) || (authentication === null)) return authentication;
                 return config.selectAccessToken(authentication);
             },
@@ -323,23 +302,20 @@ export const injectAuthApiSlice = <
                 } // try
             },
         };
-    };
-    
-    
-    
-    // prefetch:
-    const apiMiddleware = injectedAuthApiSlice.middleware;
-    injectedAuthApiSlice.middleware = (storeApi) => {
+        
+        
+        
+        // prefetch:
         Promise.resolve().then(async () => {
             // create an initial `auth` cache as loggedOut:
-            await storeApi.dispatch(
+            await api.dispatch(
                 injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
             );
             
             
             
             // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-            storeApi.dispatch(
+            api.dispatch(
                 injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
             );
         });
@@ -347,7 +323,7 @@ export const injectAuthApiSlice = <
         
         
         // return the original middleware:
-        return apiMiddleware(storeApi);
+        return apiMiddleware(api);
     };
     
     
