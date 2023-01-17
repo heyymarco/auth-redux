@@ -53,7 +53,6 @@ export type AccessToken    = string  & {}
 // shared apis:
 let authConfig          : Required<AuthOptions>|undefined = undefined;
 let authApi : {
-    loginStatusResolved : boolean
     dispatch            : ThunkDispatch<any, any, AnyAction>
     getAccessToken      : () => Promise<AccessToken|null|undefined>
     refreshAccessToken  : () => Promise<AccessToken|null|undefined>
@@ -189,32 +188,6 @@ export const injectAuthApiSlice = <
                     extraOptions: {
                         noAuth: true,
                     },
-                    async transformErrorResponse(baseQueryReturnValue, meta, noParam) {
-                        if (authApi) {
-                            if (!authApi.loginStatusResolved) {
-                                const responseStatus = (meta as any)?.response?.status;
-                                if ((responseStatus !== undefined) && authConfig && [authConfig.tokenExpiredStatus].flat().includes(responseStatus)) {
-                                    // response of `tokenExpiredStatus` => treat as loggedOut
-                                    
-                                    
-                                    
-                                    authApi.loginStatusResolved = true;
-                                    
-                                    Promise.resolve().then(() => { // an async hack: mark as loggedOut AFTER `rejected`
-                                        // mark accessToken as loggedOut:
-                                        // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
-                                        authApi?.dispatch(
-                                            injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
-                                        );
-                                    });
-                                } // if
-                            } // if
-                        } // if
-                        
-                        
-                        
-                        return baseQueryReturnValue; // no transformation, return exactly as server response
-                    },
                 }),
                 login  : builder.mutation<Authentication, Credential>({
                     query : (credential: Credential) => ({
@@ -296,8 +269,6 @@ export const injectAuthApiSlice = <
     injectedAuthApiSlice.middleware = (api) => {
         // setup:
         authApi = {
-            loginStatusResolved : false,
-            
             dispatch            : api.dispatch,
             
             // provides the callback for getting the auth data:
@@ -343,29 +314,63 @@ export const injectAuthApiSlice = <
         
         
         // prefetch:
-        Promise.resolve().then(async () => {
-            if (authApi?.loginStatusResolved) {
-                // create an initial `auth` cache as loggedOut:
-                await api.dispatch(
-                    injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
-                );
-            } // if
-            
-            
-            
+        const handleInit = () => {
             if (typeof(window) !== 'undefined') { // client side only
-                // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
-                // no need to `await`
-                api.dispatch(
-                    injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
-                );
+                Promise.resolve().then(() => { // prevents double `/refresh` request at startup by letting the (app) `useAuth()` hook to connect first
+                    // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
+                    // no need to `await`
+                    api.dispatch(
+                        injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
+                    );
+                    console.log('cleanup prevented');
+                });
             } // if
-        });
+            
+            
+            
+            console.log('registered!');
+        };
+        const handleAuthRejected = (responseStatus: number|string) => {
+            /*
+                when the `auth` is not initialized `(data === undefined)`,
+                the FIRST `forbidden` response treated as loggedOut
+            */
+            if (authConfig && [authConfig.tokenExpiredStatus].flat().includes(responseStatus)) { // forbidden
+                if(!('data' in injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any))) { // the `auth` is not initialized `(data === undefined)`
+                    // mark accessToken as loggedOut:
+                    // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
+                    api.dispatch(
+                        injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
+                    );
+                    console.log('marked as loggedOut');
+                } // if
+            } // if
+        };
         
         
         
-        // return the original middleware:
-        return apiMiddleware(api);
+        // intercept the original_middleware:
+        const actionTypeMiddlewareRegistered = injectedAuthApiSlice.internalActions.middlewareRegistered('').type;
+        const isAuthRejected                 = injectedAuthApiSlice.endpoints.auth.matchRejected
+        
+        const apiNextDispatch = apiMiddleware(api);
+        return (nextDispatch) => (action) => {
+            const result = apiNextDispatch(nextDispatch)(action);
+            
+            
+            
+            if (action?.type === actionTypeMiddlewareRegistered) {
+                handleInit();
+            }
+            else if (isAuthRejected(action)) {
+                const responseStatus = (action?.payload as any)?.status;
+                if (responseStatus) handleAuthRejected(responseStatus);
+            } // if
+            
+            
+            
+            return result;
+        };
     };
     
     
@@ -437,7 +442,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
         await new Promise<void>((resolve) => {
             setTimeout(() => {
                 resolve();
-            }, 10000);
+            }, 1000);
         });
         
         
@@ -450,7 +455,7 @@ export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBas
         
         
         // re-auth:
-        if (result.error && accessToken && authApi && authConfig && [authConfig.tokenExpiredStatus].flat().includes(result.error.status)) {
+        if (result.error && accessToken && authApi && authConfig && [authConfig.tokenExpiredStatus].flat().includes(result.error.status)) { // forbidden
             // re-generate accessToken:
             accessToken = await authApi.refreshAccessToken();
             if (accessToken) {
