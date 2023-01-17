@@ -51,7 +51,8 @@ export const injectAuthApiSlice = <
     // custom hooks:
     const usePersistLogin = () => {
         // states:
-        const [persistLogin, setPersistLogin] = useState<boolean>(getPersistLogin);
+        const persistLoginState = useState<boolean>(getPersistLogin);
+        const [persistLogin] = persistLoginState;
         
         
         
@@ -63,7 +64,7 @@ export const injectAuthApiSlice = <
         
         
         // the react hook:
-        return [persistLogin, setPersistLogin] as const;
+        return persistLoginState;
     };
     
     
