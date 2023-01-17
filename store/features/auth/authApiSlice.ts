@@ -375,7 +375,7 @@ export const injectAuthApiSlice = <
                 when the `auth` is not initialized `(data === undefined)`,
                 the FIRST `forbidden` response treated as loggedOut
             */
-            if (authConfig && [authConfig.tokenExpiredStatus].flat().includes(responseStatus)) { // forbidden
+            if (authConfig && ([authConfig.tokenExpiredStatus].flat().includes(responseStatus) || ((responseStatus >= 300) && (responseStatus < 500)))) { // forbidden, redirect_page, 3xx status, not_found, 4xx status
                 if(!('data' in injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any))) { // the `auth` is not initialized `(data === undefined)`
                     // mark accessToken as loggedOut:
                     // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
