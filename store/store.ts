@@ -12,7 +12,7 @@ export const store = configureStore({
     middleware : (getDefaultMiddleware) => getDefaultMiddleware().concat(
         apiSlice.middleware,
     ),
-    devTools   : true,
+    devTools   : (process.env.NODE_ENV === 'production'),
 });
 
 export type AppDispatch = typeof store.dispatch;
