@@ -214,7 +214,6 @@ export const injectAuthApiSlice = <
                         */
                         if(isInitialSetup) { // the `auth` is not initialized `(data === undefined)`
                             if (!getPersistLogin()) {
-                                console.log('noPersistLogin => mark as logged out');
                                 // mark accessToken as loggedOut:
                                 return {
                                     data: null /* = loggedOut */,
@@ -241,7 +240,6 @@ export const injectAuthApiSlice = <
                             the subsequent errors will be normal.
                         */
                         if (isInitialSetup && result.error && authConfig && ([authConfig.tokenExpiredStatus].flat().includes((result.error as any).status) || (((result.error as any).status >= 300) && ((result.error as any).status < 500) && ((result.error as any).status !== 408)))) { // forbidden, redirect_page, 3xx status, not_found, 4xx status, exept 408 status (request timeout)
-                            console.log('error => mark as logged out');
                             // mark accessToken as loggedOut:
                             return {
                                 data: null /* = loggedOut */,
@@ -387,13 +385,8 @@ export const injectAuthApiSlice = <
                     api.dispatch(
                         injectedAuthApiSlice.endpoints.auth.initiate(undefined, { forceRefetch: false })
                     );
-                    console.log('cleanup prevented');
                 });
             } // if
-            
-            
-            
-            console.log('registered!');
         };
         
         
@@ -507,15 +500,6 @@ const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
 
 export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBaseQuery>): ReturnType<typeof fetchBaseQuery> => {
     const interceptedBaseQueryFn : typeof baseQueryFn = async (args, api, extraOptions) => {
-        // // TODO: remove this:
-        // await new Promise<void>((resolve) => {
-        //     setTimeout(() => {
-        //         resolve();
-        //     }, 10000);
-        // });
-        
-        
-        
         // the initial query:
         const forceNoAccessToken = ((extraOptions as any)?.['noAuth'] === true);
         let accessToken          = forceNoAccessToken ? undefined : (await authApi?.getAccessToken());
