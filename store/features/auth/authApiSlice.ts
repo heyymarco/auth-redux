@@ -1,10 +1,5 @@
 // redux toolkit:
 import type {
-    // actions:
-    ThunkDispatch,
-    AnyAction,
-}                               from '@reduxjs/toolkit'
-import type {
     // fetches:
     BaseQueryFn,
     fetchBaseQuery,
@@ -424,6 +419,12 @@ export const injectAuthApiSlice = <
     
     
     
+    // custom hooks:
+    const getPersistLogin = (): boolean => (localStorage.getItem(config.persistLoginKey) === 'true');
+    const setPersistLogin = (value: boolean|((oldValue: boolean) => boolean)): void => localStorage.setItem(config.persistLoginKey, String(!!((typeof(value) === 'function') ? value(getPersistLogin()) : value)));
+    
+    
+    
     // rename the hooks to more human readable names:
     const {
         useAuthQuery      : useAuth,
@@ -433,10 +434,13 @@ export const injectAuthApiSlice = <
     
     // return the combined apiSlice:
     return {
+        getPersistLogin,
+        setPersistLogin,
+        
         useAuth,
         useLogin,
         useLogout,
-        ...restInjectedAuthApiSlice
+        ...restInjectedAuthApiSlice,
     };
 };
 
