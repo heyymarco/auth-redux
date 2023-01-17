@@ -16,6 +16,15 @@ import type {
     EndpointDefinitions,
 }                               from '@reduxjs/toolkit/query'
 import type {
+    // common types:
+    MaybePromise,
+}                               from '@reduxjs/toolkit/dist/query/tsHelpers'
+import type {
+    // base queries:
+    QueryReturnValue,
+    BaseQueryError,
+}                               from '@reduxjs/toolkit/dist/query/baseQueryTypes'
+import type {
     // requests & responses:
     FetchArgs,
 }                               from '@reduxjs/toolkit/dist/query/fetchBaseQuery'
@@ -35,8 +44,18 @@ import type {
     reactHooksModuleName,
 }                               from '@reduxjs/toolkit/dist/query/react/module'
 
-// jwt:
+// other libs:
 import jwt_decode               from 'jwt-decode'
+import {
+    // tests:
+    isBrowser,
+    isJsDom,
+}                               from 'is-in-browser'
+
+
+
+// utilities:
+export const isClientSide : boolean = isBrowser || isJsDom;
 
 
 
@@ -179,12 +198,33 @@ export const injectAuthApiSlice = <
         .injectEndpoints({
             endpoints  : (builder) => ({
                 auth   : builder.query<Authentication, void>({
-                    query : () => ({
-                        url             : config.authRefreshPath,
-                        method          : config.authRefreshMethod,
-                        credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
-                        responseHandler : 'content-type',
-                    }),
+                    // query : () => ({
+                    //     url             : config.authRefreshPath,
+                    //     method          : config.authRefreshMethod,
+                    //     credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
+                    //     responseHandler : 'content-type',
+                    // }),
+                    queryFn(noParam, api, extraOptions, baseQuery): MaybePromise<QueryReturnValue<Authentication, BaseQueryError<TBaseQuery>, {}>> {
+                        if (!isClientSide) { // server side only
+                            return new Promise<QueryReturnValue<Authentication, BaseQueryError<TBaseQuery>, {}>>(() => {
+                                /*
+                                    never resolved!
+                                    ensures:
+                                    * the server_side pre_rendering_html always in `loading...`
+                                    * no http `/refresh` request on server_side during pre_rendering_html
+                                */
+                            });
+                        } // if
+                        
+                        
+                        
+                        return (baseQuery as unknown as BaseQueryFn<RawArgs, Authentication, BaseQueryError<TBaseQuery>>)({
+                            url             : config.authRefreshPath,
+                            method          : config.authRefreshMethod,
+                            credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
+                            responseHandler : 'content-type',
+                        }, api, extraOptions);
+                    },
                     extraOptions: {
                         noAuth: true,
                     },
@@ -315,7 +355,7 @@ export const injectAuthApiSlice = <
         
         // prefetch:
         const handleInit = () => {
-            if (typeof(window) !== 'undefined') { // client side only
+            if (isClientSide) { // client side only
                 Promise.resolve().then(() => { // prevents double `/refresh` request at startup by letting the (app) `useAuth()` hook to connect first
                     // prevents the `accessToken` cache data from being deleted by making a subscription by calling `dispatch(initiate())`:
                     // no need to `await`
@@ -438,12 +478,12 @@ const injectArgs = (args: RawArgs, accessToken: AccessToken): FetchArgs => {
 
 export const fetchBaseQueryWithReauth = (baseQueryFn: ReturnType<typeof fetchBaseQuery>): ReturnType<typeof fetchBaseQuery> => {
     const interceptedBaseQueryFn : typeof baseQueryFn = async (args, api, extraOptions) => {
-        // TODO: remove this:
-        await new Promise<void>((resolve) => {
-            setTimeout(() => {
-                resolve();
-            }, 1000);
-        });
+        // // TODO: remove this:
+        // await new Promise<void>((resolve) => {
+        //     setTimeout(() => {
+        //         resolve();
+        //     }, 10000);
+        // });
         
         
         
