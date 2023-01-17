@@ -15,10 +15,11 @@ export default function RedirectLogin() {
         // router.replace(loginPath, { query: { from: router.pathname } });
         
         // works:
+        const from = router.pathname;
         router.replace(loginPath);
         const cancelRedirect = setTimeout(() => {
-            router.replace(loginPath, { query: { from: router.pathname } });
-        }, 0);
+            router.replace(loginPath, { query: { from } });
+        }, 100);
         
         
         

@@ -8,8 +8,8 @@ import {
 import {
     fetchBaseQueryWithReauth,
     injectAuthApiSlice,
-}                               from '../auth/authApiSlice'
-export *                        from '../auth/authApiSlice'
+}                               from '../auth/authApiSlice-react'
+export *                        from '../auth/authApiSlice-react'
 
 // internals:
 import config                   from '../../../redux-auth.config'
@@ -42,4 +42,5 @@ export const {
     useAuth,
     useLogin,
     useLogout,
+    usePersistLogin,
 } = injectAuthApiSlice(apiSlice, config);

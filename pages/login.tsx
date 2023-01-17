@@ -3,7 +3,7 @@ import Head from 'next/head'
 import { Main } from '../components/Main'
 import { useRouter } from 'next/router';
 import { useState } from 'react';
-import { useAuth, Credential, useLogin } from '../store/features/api/apiSlice';
+import { Credential, useLogin, usePersistLogin } from '../store/features/api/apiSlice';
 
 
 
@@ -12,6 +12,7 @@ export default function Login() {
     const [login] = useLogin();
     const router = useRouter();
     const [enableValidation, setEnableValidation] = useState(false);
+    const [persistLogin, setPersistLogin] = usePersistLogin();
     
     const handleSubmit : React.FormEventHandler<HTMLFormElement> = async (event) => {
         event.preventDefault();
@@ -57,7 +58,7 @@ export default function Login() {
                         </Form>
                     </CardBody>
                     <CardFooter>
-                        {/* <Check checkStyle='switch' active={Auth.persistLogin} onActiveChange={(event) => Auth.persistLogin = event.active}>Trust this device</Check> */}
+                        <Check checkStyle='switch' active={persistLogin} onActiveChange={(event) => setPersistLogin(event.active)}>Trust this device</Check>
                     </CardFooter>
                 </Card>
             </Main>

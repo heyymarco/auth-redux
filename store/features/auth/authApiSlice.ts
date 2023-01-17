@@ -436,9 +436,12 @@ export const injectAuthApiSlice = <
     
     // rename the hooks to more human readable names:
     const {
-        useAuthQuery      : useAuth,
-        useLoginMutation  : useLogin,
-        useLogoutMutation : useLogout,
+        useAuthQuery      : useAuth,           // rename
+        useLoginMutation  : useLogin,          // rename
+        useLogoutMutation : useLogout,         // rename
+        
+        useLazyAuthQuery  : _useLazyAuthQuery, // delete
+        usePrefetch       : _usePrefetch,      // delete
     ...restInjectedAuthApiSlice} = injectedAuthApiSlice;
     
     // return the combined apiSlice:
