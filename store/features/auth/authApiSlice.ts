@@ -218,6 +218,25 @@ export const injectAuthApiSlice = <
                         
                         
                         
+                        /*
+                            when the `auth` is not initialized `(data === undefined)`,
+                            the FIRST request treated as loggedOut.
+                            
+                            the subsequent request will be normal request.
+                        */
+                        if(!('data' in injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any))) { // the `auth` is not initialized `(data === undefined)`
+                            if (localStorage.getItem(config.persistLoginKey) !== 'true') {
+                                console.log('mark as logged out');
+                                // mark accessToken as loggedOut:
+                                return {
+                                    data: null /* = loggedOut */ as unknown as Authentication,
+                                };
+                            } // if
+                        } // if
+                        
+                        
+                        
+                        // normal request:
                         return (baseQuery as unknown as BaseQueryFn<RawArgs, Authentication, BaseQueryError<TBaseQuery>>)({
                             url             : config.authRefreshPath,
                             method          : config.authRefreshMethod,
@@ -373,7 +392,9 @@ export const injectAuthApiSlice = <
         const handleAuthRejected = (responseStatus: number|string) => {
             /*
                 when the `auth` is not initialized `(data === undefined)`,
-                the FIRST `forbidden` response treated as loggedOut
+                the FIRST `forbidden` response treated as loggedOut.
+                
+                the subsequent errors will be normal.
             */
             if (authConfig && ([authConfig.tokenExpiredStatus].flat().includes(responseStatus) || ((responseStatus >= 300) && (responseStatus < 500)))) { // forbidden, redirect_page, 3xx status, not_found, 4xx status
                 if(!('data' in injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any))) { // the `auth` is not initialized `(data === undefined)`
