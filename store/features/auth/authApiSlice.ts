@@ -68,7 +68,6 @@ export type AccessToken    = string  & {}
 // shared apis:
 let authConfig          : Required<AuthOptions>|undefined = undefined;
 let authApi : {
-    dispatch            : ThunkDispatch<any, any, AnyAction>
     getAccessToken      : () => Promise<AccessToken|null|undefined>
     refreshAccessToken  : () => Promise<AccessToken|null|undefined>
     logout              : (forceLogout?: boolean) => Promise<void>
@@ -342,8 +341,6 @@ export const injectAuthApiSlice = <
     injectedAuthApiSlice.middleware = (api) => {
         // setup:
         authApi = {
-            dispatch            : api.dispatch,
-            
             // provides the callback for getting the auth data:
             getAccessToken      : async () => {
                 const authentication = injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any).data;
