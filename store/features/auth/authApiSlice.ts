@@ -213,7 +213,7 @@ export const injectAuthApiSlice = <
                             the subsequent request will be normal request.
                         */
                         if(isInitialSetup) { // the `auth` is not initialized `(data === undefined)`
-                            if (localStorage.getItem(config.persistLoginKey) !== 'true') {
+                            if (!getPersistLogin()) {
                                 console.log('noPersistLogin => mark as logged out');
                                 // mark accessToken as loggedOut:
                                 return {
@@ -420,8 +420,24 @@ export const injectAuthApiSlice = <
     
     
     // custom hooks:
-    const getPersistLogin = (): boolean => (localStorage.getItem(config.persistLoginKey) === 'true');
-    const setPersistLogin = (value: boolean|((oldValue: boolean) => boolean)): void => localStorage.setItem(config.persistLoginKey, String(!!((typeof(value) === 'function') ? value(getPersistLogin()) : value)));
+    const getPersistLogin = (): boolean => {
+        // conditions:
+        if (!isClientSide) return config.defaultPersistLogin;
+        
+        
+        
+        const value = localStorage.getItem(config.persistLoginKey);
+        if ((value === undefined) || (value === null)) return config.defaultPersistLogin;
+        return (value === 'true');
+    };
+    const setPersistLogin = (value: boolean|((oldValue: boolean) => boolean)): void => {
+        // conditions:
+        if (!isClientSide) return;
+        
+        
+        
+        localStorage.setItem(config.persistLoginKey, String(!!((typeof(value) === 'function') ? value(getPersistLogin()) : value)))
+    };
     
     
     
