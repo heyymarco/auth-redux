@@ -197,16 +197,16 @@ export const injectAuthApiSlice = <
         (apiSlice as unknown as Api<BaseQueryFn, {}, TReducerPath, TTagTypes, typeof coreModuleName | typeof reactHooksModuleName>)
         .injectEndpoints({
             endpoints  : (builder) => ({
-                auth   : builder.query<Authentication, void>({
+                auth   : builder.query<Authentication|null, void>({
                     // query : () => ({
                     //     url             : config.authRefreshPath,
                     //     method          : config.authRefreshMethod,
                     //     credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
                     //     responseHandler : 'content-type',
                     // }),
-                    queryFn(noParam, api, extraOptions, baseQuery): MaybePromise<QueryReturnValue<Authentication, BaseQueryError<TBaseQuery>, {}>> {
+                    async queryFn(noParam, api, extraOptions, baseQuery): Promise<QueryReturnValue<Authentication|null, BaseQueryError<TBaseQuery>, {}>> {
                         if (!isClientSide) { // server side only
-                            return new Promise<QueryReturnValue<Authentication, BaseQueryError<TBaseQuery>, {}>>(() => {
+                            return new Promise<QueryReturnValue<Authentication|null, BaseQueryError<TBaseQuery>, {}>>(() => {
                                 /*
                                     never resolved!
                                     ensures:
@@ -218,18 +218,22 @@ export const injectAuthApiSlice = <
                         
                         
                         
+                        const isInitialSetup = !('data' in injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any));
+                        
+                        
+                        
                         /*
-                            when the `auth` is not initialized `(data === undefined)`,
-                            the FIRST request treated as loggedOut.
+                            when the `auth` is not initialized `(data === undefined)` -and- NO_persistLogin,
+                            the FIRST request attempt treated as loggedOut.
                             
                             the subsequent request will be normal request.
                         */
-                        if(!('data' in injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any))) { // the `auth` is not initialized `(data === undefined)`
+                        if(isInitialSetup) { // the `auth` is not initialized `(data === undefined)`
                             if (localStorage.getItem(config.persistLoginKey) !== 'true') {
-                                console.log('mark as logged out');
+                                console.log('noPersistLogin => mark as logged out');
                                 // mark accessToken as loggedOut:
                                 return {
-                                    data: null /* = loggedOut */ as unknown as Authentication,
+                                    data: null /* = loggedOut */,
                                 };
                             } // if
                         } // if
@@ -237,12 +241,32 @@ export const injectAuthApiSlice = <
                         
                         
                         // normal request:
-                        return (baseQuery as unknown as BaseQueryFn<RawArgs, Authentication, BaseQueryError<TBaseQuery>>)({
+                        const result = await (baseQuery as unknown as BaseQueryFn<RawArgs, Authentication, BaseQueryError<TBaseQuery>>)({
                             url             : config.authRefreshPath,
                             method          : config.authRefreshMethod,
                             credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
                             responseHandler : 'content-type',
                         }, api, extraOptions);
+                        
+                        
+                        
+                        /*
+                            when the `auth` is not initialized `(data === undefined)` -and- the server responses `forbidden`,
+                            the FIRST `forbidden` response treated as loggedOut.
+                            
+                            the subsequent errors will be normal.
+                        */
+                        if (isInitialSetup && result.error && authConfig && ([authConfig.tokenExpiredStatus].flat().includes((result.error as any).status) || (((result.error as any).status >= 300) && ((result.error as any).status < 500) && ((result.error as any).status !== 408)))) { // forbidden, redirect_page, 3xx status, not_found, 4xx status, exept 408 status (request timeout)
+                            console.log('error => mark as logged out');
+                            // mark accessToken as loggedOut:
+                            return {
+                                data: null /* = loggedOut */,
+                            };
+                        } // if
+                        
+                        
+                        
+                        return result;
                     },
                     extraOptions: {
                         noAuth: true,
@@ -389,24 +413,6 @@ export const injectAuthApiSlice = <
             
             console.log('registered!');
         };
-        const handleAuthRejected = (responseStatus: number|string) => {
-            /*
-                when the `auth` is not initialized `(data === undefined)`,
-                the FIRST `forbidden` response treated as loggedOut.
-                
-                the subsequent errors will be normal.
-            */
-            if (authConfig && ([authConfig.tokenExpiredStatus].flat().includes(responseStatus) || ((responseStatus >= 300) && (responseStatus < 500)))) { // forbidden, redirect_page, 3xx status, not_found, 4xx status
-                if(!('data' in injectedAuthApiSlice.endpoints.auth.select(undefined)(api.getState() as any))) { // the `auth` is not initialized `(data === undefined)`
-                    // mark accessToken as loggedOut:
-                    // an artificial `auth` api request to trigger: `pending` => `queryResultPatched` (if needed) => `fulfilled`:
-                    api.dispatch(
-                        injectedAuthApiSlice.util.upsertQueryData('auth' as any, /* noParam: */ undefined, /* authentication: */ null /* = loggedOut */)
-                    );
-                    console.log('marked as loggedOut');
-                } // if
-            } // if
-        };
         
         
         
@@ -422,10 +428,6 @@ export const injectAuthApiSlice = <
             
             if (action?.type === actionTypeMiddlewareRegistered) {
                 handleInit();
-            }
-            else if (isAuthRejected(action)) {
-                const responseStatus = (action?.payload as any)?.status;
-                if (responseStatus) handleAuthRejected(responseStatus);
             } // if
             
             

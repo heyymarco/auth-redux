@@ -27,7 +27,7 @@ export interface RequireAuthProps {
     children            ?: React.ReactNode
 }
 export const RequireAuth = ({roles: requiredRoles, loadingPage, errorPage, unauthenticatedPage, unauthorizedPage, children}: RequireAuthProps) => {
-    const {isLoading, isError, data: auth} = useAuth();
+    const {isLoading, isError, data: auth = null} = useAuth();
     
     
     
