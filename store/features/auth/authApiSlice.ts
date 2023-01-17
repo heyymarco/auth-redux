@@ -16,10 +16,6 @@ import type {
     EndpointDefinitions,
 }                               from '@reduxjs/toolkit/query'
 import type {
-    // common types:
-    MaybePromise,
-}                               from '@reduxjs/toolkit/dist/query/tsHelpers'
-import type {
     // base queries:
     QueryReturnValue,
     BaseQueryError,
@@ -198,12 +194,6 @@ export const injectAuthApiSlice = <
         .injectEndpoints({
             endpoints  : (builder) => ({
                 auth   : builder.query<Authentication|null, void>({
-                    // query : () => ({
-                    //     url             : config.authRefreshPath,
-                    //     method          : config.authRefreshMethod,
-                    //     credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
-                    //     responseHandler : 'content-type',
-                    // }),
                     async queryFn(noParam, api, extraOptions, baseQuery): Promise<QueryReturnValue<Authentication|null, BaseQueryError<TBaseQuery>, {}>> {
                         if (!isClientSide) { // server side only
                             return new Promise<QueryReturnValue<Authentication|null, BaseQueryError<TBaseQuery>, {}>>(() => {
@@ -418,7 +408,6 @@ export const injectAuthApiSlice = <
         
         // intercept the original_middleware:
         const actionTypeMiddlewareRegistered = injectedAuthApiSlice.internalActions.middlewareRegistered('').type;
-        const isAuthRejected                 = injectedAuthApiSlice.endpoints.auth.matchRejected
         
         const apiNextDispatch = apiMiddleware(api);
         return (nextDispatch) => (action) => {
