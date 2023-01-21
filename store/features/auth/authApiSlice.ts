@@ -105,7 +105,7 @@ const configureOptions = (options?: AuthOptions): Required<AuthOptions> => {
         tokenExpiredStatus  = 403,
         
         selectAccessToken   = (auth: Authentication): AccessToken => {
-            const accessToken = (auth as any)?.accessToken;
+            const accessToken = (auth as any)?.access_token;
             if ((accessToken === undefined) || (accessToken === null)) throw Error('invalid data');
             return accessToken;
         },
