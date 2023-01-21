@@ -55,6 +55,10 @@ export interface Credential {
     username : string
     password : string
 }
+export interface OAuthAuthorization {
+    code     : string
+    state   ?: string
+}
 export type Authentication = unknown & {}
 export type AccessToken    = string  & {}
 
@@ -227,7 +231,7 @@ export const injectAuthApiSlice = <
                         const result = await (baseQuery as unknown as BaseQueryFn<RawArgs, Authentication, BaseQueryError<TBaseQuery>>)({
                             url             : config.authRefreshPath,
                             method          : config.authRefreshMethod,
-                            credentials     : 'include',           // need to SEND_BACK `refreshToken` in the `http_only_cookie`
+                            credentials     : 'include',           // need to SEND_BACK and SEND_FORTH (if backend implements refreshToken rotation) `refreshToken` in the `http_only_cookie`
                             responseHandler : 'content-type',
                         }, api, extraOptions);
                         
@@ -254,8 +258,8 @@ export const injectAuthApiSlice = <
                         noAuth: true,
                     },
                 }),
-                login  : builder.mutation<Authentication, Credential>({
-                    query : (credential: Credential) => ({
+                login  : builder.mutation<Authentication, Credential|OAuthAuthorization>({
+                    query : (credential: Credential|OAuthAuthorization) => ({
                         url             : config.loginPath,
                         method          : config.loginMethod,
                         credentials     : 'include',           // need to RECEIVE `refreshToken` in the `http_only_cookie`
